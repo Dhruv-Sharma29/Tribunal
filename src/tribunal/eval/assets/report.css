@@ -1,0 +1,64 @@
+/* Results report. Inlined next to the viewer's palette, which it reuses. */
+
+.wrap { max-width: 1180px; }
+
+.meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.meta b { color: var(--ink); font-weight: 600; }
+
+.banner {
+  border-left: 3px solid var(--medium);
+  background: var(--panel);
+  padding: 10px 14px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.banner.bad { border-left-color: var(--high); }
+.banner.good { border-left-color: var(--ok); }
+.banner b { display: block; margin-bottom: 2px; }
+
+h1 { font-size: 20px; margin: 20px 0 4px; }
+h2 { font-size: 15px; margin: 30px 0 10px; letter-spacing: 0.02em; }
+
+table.results td.metric { font-weight: 600; }
+table.results td.sub { padding-left: 26px; color: var(--muted); font-weight: 400; }
+table.results td.lead { background: var(--panel); }
+table.results th.arm { text-align: right; font-family: var(--mono); }
+
+.count { font-family: var(--mono); }
+.na { color: var(--muted); }
+
+/* Per-case matrix: the thing a markdown summary cannot show. */
+table.matrix td.case { font-family: var(--mono); font-size: 12px; }
+table.matrix td.cell { text-align: center; font-family: var(--mono); font-size: 12px; }
+.pill {
+  display: inline-block;
+  min-width: 34px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+.pill.all { background: var(--ok); color: #fff; border-color: transparent; }
+.pill.some { background: var(--medium); color: #fff; border-color: transparent; }
+.pill.none { background: var(--high); color: #fff; border-color: transparent; }
+.pill.na { color: var(--muted); }
+.fix { font-size: 11px; margin-left: 4px; }
+.fix.yes { color: var(--ok); }
+.fix.no { color: var(--high); }
+
+.cat { font-size: 11px; color: var(--muted); }
+.how { font-size: 11px; }
+.how.rule, .how.line_range { color: var(--ok); }
+.how.judge { color: var(--medium); }
+.how.none { color: var(--high); }
+
+details.case { border-top: 1px solid var(--line); padding: 8px 0; }
+details.case summary { cursor: pointer; font-family: var(--mono); font-size: 13px; }
+details.case .body { padding: 8px 0 4px 18px; font-size: 13px; }
+
+.caveats { margin-top: 34px; border-top: 2px solid var(--line); padding-top: 14px; }
+.caveats p { color: var(--muted); font-size: 13px; max-width: 78ch; }

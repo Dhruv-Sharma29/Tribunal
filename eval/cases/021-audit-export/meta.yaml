@@ -1,0 +1,32 @@
+id: 021-audit-export
+category: both_independent
+known_issues:
+  - key: assert_authorisation
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "B101"}
+    description: >-
+      The authorisation check is an `assert`, and asserts are removed entirely when Python
+      runs with -O or PYTHONOPTIMIZE. In an optimised deployment the export becomes
+      unauthenticated, with no error and no log line.
+  - key: csv_concat_in_loop
+    dimension: performance
+    expected_severity: low
+    locator:
+      kind: line_range
+      value: [11, 11]
+      anchor: |-
+        body = body + f"{entry['ts']},{entry['actor']},{entry['action']}\n"
+    description: >-
+      The CSV body is rebuilt with + on every entry, which is quadratic in the number of
+      entries; appending to a list and joining once is linear.
+expected_outcome: accept
+forbidden_regressions:
+  - "an unpermitted user must still be refused"
+  - "the header row must still come first"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. The two defects are in different functions and neither fix touches the
+  other, which is what `both_independent` means -- contrast 003 and 008, where the remedies
+  pull on the same line.
+split: heldout

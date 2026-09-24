@@ -1,0 +1,19 @@
+id: 001-shell-injection-report
+category: security_only
+known_issues:
+  - key: shell_injection
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "B602"}
+    description: >-
+      report_name is concatenated into a shell command run with shell=True, so a name
+      containing a semicolon executes arbitrary commands.
+expected_outcome: accept
+forbidden_regressions:
+  - "must still return the destination path"
+  - "must still invoke the report command"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. The shape -- a caller-supplied name concatenated into a shell string for a
+  report generator -- is the most common form of CWE-78 in internal tooling.
+split: dev

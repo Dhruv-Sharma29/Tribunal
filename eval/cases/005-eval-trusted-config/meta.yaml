@@ -1,0 +1,21 @@
+id: 005-eval-trusted-config
+category: canary_seeded_bad
+known_issues:
+  - key: eval_on_config
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "B307"}
+    description: >-
+      eval() executes the expression text. The module docstring asserts the input is
+      trusted, which is a claim about deployment rather than about this function -- anyone
+      who can write alerts.conf gets arbitrary code execution, and so does anyone who can
+      make the file come from somewhere else later.
+expected_outcome: accept
+forbidden_regressions:
+  - "expressions must still be able to reference earlier names"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. The shape -- eval() on a config file, defended in a comment by "the input is
+  trusted" -- is how this survives review in real repositories, and the comment is the part
+  under test.
+split: dev

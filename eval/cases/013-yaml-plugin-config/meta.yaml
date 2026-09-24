@@ -1,0 +1,19 @@
+id: 013-yaml-plugin-config
+category: security_only
+known_issues:
+  - key: unsafe_yaml_load
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "S506"}
+    description: >-
+      yaml.Loader constructs arbitrary Python objects from tags like !!python/object/apply,
+      so parsing a plugin's config is code execution. yaml.safe_load is the drop-in fix and
+      the isinstance check downstream runs far too late to help.
+expected_outcome: accept
+forbidden_regressions:
+  - "must still raise ValueError on a non-mapping document"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. The `Loader=yaml.Loader` form specifically: it is what people write when a
+  deprecation warning tells them to pass a loader and they pick the first one named.
+split: heldout

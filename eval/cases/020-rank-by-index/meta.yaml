@@ -1,0 +1,22 @@
+id: 020-rank-by-index
+category: performance_only
+known_issues:
+  - key: linear_index_per_name
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [5, 5]
+      anchor: "rank = ordering.index(name)"
+    description: >-
+      list.index is a linear scan, called once per name, making the ranking O(n*m) where a
+      single {name: position} dict built once makes it O(n+m).
+expected_outcome: accept
+forbidden_regressions:
+  - "the result must stay sorted by rank"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. The quadratic-lookup pattern again, in the form that is harder to see than
+  002's `in` -- `.index()` reads as a lookup, and the fact that it scans is a property of
+  the type rather than of the call.
+split: heldout

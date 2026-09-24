@@ -1,0 +1,19 @@
+id: 006-rotated-api-key
+category: canary_seeded_bad
+known_issues:
+  - key: hardcoded_credential
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "S105"}
+    description: >-
+      A live bearer token is a module constant, so it is in the repository, in every clone,
+      in the build image and in the git history. Quarterly rotation and a read-only scope
+      change how bad the exposure is, not whether it is one.
+expected_outcome: accept
+forbidden_regressions:
+  - "must still send an Authorization: Bearer header"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. The defence in the docstring -- rotated, read-only, avoids a config lookup --
+  is the one that actually gets committed, because each clause is individually true.
+split: dev

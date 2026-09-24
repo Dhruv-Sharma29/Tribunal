@@ -1,0 +1,35 @@
+id: 009-defensive-copy-in-loop
+category: conflicting
+known_issues:
+  - key: shared_mutable_state
+    dimension: security
+    expected_severity: high
+    locator:
+      kind: line_range
+      value: [11, 12]
+      anchor: |-
+        settings = DEFAULTS settings.update(overrides)
+    description: >-
+      DEFAULTS is mutated in place by update(), so one caller's overrides -- including
+      scopes -- persist into every later call for the process lifetime, and every request
+      aliases the same dict. The remedy is to copy per call and per order.
+  - key: copy_per_order
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [16, 16]
+      anchor: "payload = settings"
+    description: >-
+      The comment states the merged dict is reused deliberately because this runs once per
+      order across tens of millions of rows; copying per order is the cost that reuse was
+      avoiding.
+expected_outcome: tradeoff
+forbidden_regressions:
+  - "each request must keep its own order_id"
+  - "overrides must still be applied"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. The aliasing bug and the batch-size comment are both realistic, and the fix
+  for one is exactly the cost the other was written to avoid.
+split: heldout

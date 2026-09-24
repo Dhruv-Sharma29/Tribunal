@@ -1,0 +1,12 @@
+id: 004-normalise-names
+category: canary_clean
+known_issues: []
+expected_outcome: accept
+forbidden_regressions:
+  - "must keep dropping names that are empty after stripping"
+runnable_benchmark: false
+provenance: >-
+  Hand-written to be genuinely unremarkable: typed, documented, idiomatic, and doing
+  something a real module would do. Any high or medium issue raised against it is a false
+  positive and counts against M3.
+split: dev

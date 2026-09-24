@@ -1,0 +1,32 @@
+id: 008-password-hash-cost
+category: conflicting
+known_issues:
+  - key: weak_kdf
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "B324"}
+    description: >-
+      A hand-rolled loop over md5 is not a password KDF. The remedy is a real one --
+      scrypt, bcrypt or PBKDF2 with a modern cost -- and its whole security property is
+      that it is deliberately, measurably slower.
+  - key: hashing_cost_in_login
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [10, 11]
+      anchor: |-
+        for _ in range(ITERATIONS): derived = hashlib.md5(derived).digest()
+    description: >-
+      The derivation loop runs on every login request and the iteration count is already
+      tuned to a 40ms p99 budget; any fix that raises the work factor spends that budget.
+expected_outcome: tradeoff
+forbidden_regressions:
+  - "verify must stay a constant-time comparison"
+  - "the derivation must stay deterministic for a given password and salt"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. This is the one genuinely irreconcilable pair in password handling: the
+  security property *is* the cost, so the security remedy and the performance remedy are the
+  same dial turned in opposite directions.
+split: heldout

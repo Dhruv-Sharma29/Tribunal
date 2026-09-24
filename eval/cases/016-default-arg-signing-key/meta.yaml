@@ -1,0 +1,24 @@
+id: 016-default-arg-signing-key
+category: security_only
+known_issues:
+  - key: hardcoded_signing_key
+    dimension: security
+    expected_severity: high
+    locator:
+      kind: line_range
+      value: [5, 5]
+      anchor: 'def sign(payload, key="s3cr3t-webhook-signing-key-2024"):'
+    description: >-
+      The webhook signing key is a default argument, so it is in the repository and every
+      caller that omits the argument -- which both tests and `verify` do -- silently uses
+      it. Anyone with repository access can forge a signed webhook.
+expected_outcome: accept
+forbidden_regressions:
+  - "verify must stay a constant-time comparison"
+  - "an explicitly passed key must still override the default"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. The parameter is named `key`, which is why no tool reports it: bandit's
+  B107 matches argument names like password/passwd/secret/token, and an HMAC key is
+  naturally called `key`. That blind spot is the point of the case.
+split: heldout

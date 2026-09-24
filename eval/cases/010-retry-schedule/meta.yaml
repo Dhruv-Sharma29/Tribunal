@@ -1,0 +1,12 @@
+id: 010-retry-schedule
+category: canary_clean
+known_issues: []
+expected_outcome: accept
+forbidden_regressions:
+  - "the delay must stay capped at max_seconds"
+  - "a zero or negative attempt must still raise"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. Chosen because back-off code attracts opinions -- jitter, overflow, float
+  arithmetic -- none of which is a defect in a capped schedule with a validated input.
+split: heldout

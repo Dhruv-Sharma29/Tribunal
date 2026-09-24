@@ -1,0 +1,31 @@
+id: 023-avatar-fetch
+category: both_independent
+known_issues:
+  - key: ssrf_and_scheme
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "B310"}
+    description: >-
+      urlopen on a user-supplied URL reaches internal addresses and cloud metadata
+      endpoints, and it also honours file:// and ftp://, so a crafted avatar URL reads
+      local files. The scheme has to be allow-listed and the host resolved and checked.
+  - key: sort_inside_the_loop
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [14, 14]
+      anchor: |-
+        ranked = sorted(avatars.items(), key=lambda pair: len(pair[1]), reverse=True)
+    description: >-
+      The full avatar list is re-sorted once per owner, so the work is O(owners * n log n)
+      where hoisting the sort out of the loop makes it O(n log n + owners * n).
+expected_outcome: accept
+forbidden_regressions:
+  - "an owner with no avatars must still map to None"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. SSRF via urlopen is the security half; the sort-inside-a-loop is a
+  distinct performance shape from the other cases (invariant work in a loop, rather than a
+  wrong data structure).
+split: heldout

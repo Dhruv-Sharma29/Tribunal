@@ -1,0 +1,30 @@
+id: 003-validated-query-in-hot-loop
+category: conflicting
+known_issues:
+  - key: sql_injection
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "S608"}
+    description: >-
+      sku is interpolated into the SELECT with %-formatting, so a crafted sku alters the
+      query. The remedy is a parameterised query plus validation of the sku at the boundary.
+  - key: query_per_sku
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [14, 14]
+      anchor: |-
+        cursor.execute("SELECT price FROM catalogue WHERE sku = '%s'" % sku)
+    description: >-
+      one round trip per sku inside the request hot path; the remedy is a single IN-clause
+      query, which is exactly the construction that makes parameterisation awkward.
+expected_outcome: tradeoff
+forbidden_regressions:
+  - "must still skip skus with no row rather than inserting None"
+runnable_benchmark: true
+provenance: >-
+  Hand-written to be genuinely conflicting rather than merely to contain two issues. The
+  security remedy (parameterise, validate per sku) and the performance remedy (collapse to
+  one IN-clause query) pull on the same line, which is the property the TRADEOFF path needs.
+split: dev

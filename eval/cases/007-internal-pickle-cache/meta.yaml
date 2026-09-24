@@ -1,0 +1,21 @@
+id: 007-internal-pickle-cache
+category: canary_seeded_bad
+known_issues:
+  - key: unsafe_deserialisation
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "B301"}
+    description: >-
+      pickle.loads executes the payload's reduce hooks during deserialisation, so the
+      isinstance check after it runs too late to matter -- code execution has already
+      happened by the time there is a value to type-check.
+expected_outcome: accept
+forbidden_regressions:
+  - "must still round-trip a state dict"
+  - "must still reject a payload that is not a dict"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. The isinstance guard is the detail that makes this realistic: it is a real
+  attempt at safety that does nothing against this attack, and a critic has to say why rather
+  than just naming pickle.
+split: dev

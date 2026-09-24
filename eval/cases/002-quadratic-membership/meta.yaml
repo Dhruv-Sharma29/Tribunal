@@ -1,0 +1,33 @@
+id: 002-quadratic-membership
+category: performance_only
+known_issues:
+  - key: list_membership
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [5, 5]
+      anchor: 'if record["id"] in allowed_ids:'
+    description: >-
+      `record["id"] in allowed_ids` is a linear scan of a list inside a loop over records,
+      making select_active O(n*m) where a set membership test would be O(n).
+  - key: string_concat_in_loop
+    dimension: performance
+    expected_severity: low
+    locator:
+      kind: line_range
+      value: [14, 14]
+      anchor: 'names = names + record["name"] + ", "'
+    description: >-
+      names is rebuilt with `+` on every iteration, which is quadratic in the number of
+      records; "".join over a list is linear.
+expected_outcome: accept
+forbidden_regressions:
+  - "select_active must preserve input order, not allowed_ids order"
+  - "summarise must not leave a trailing comma"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. Both patterns are the textbook Python performance defects and both are
+  things `ruff` sees only partially, which is the point -- the list-membership scan is not
+  flagged by any tool in the suite, so it tests whether the Profiler finds a novel issue.
+split: dev

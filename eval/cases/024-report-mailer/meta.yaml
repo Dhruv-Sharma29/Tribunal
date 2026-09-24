@@ -1,0 +1,29 @@
+id: 024-report-mailer
+category: both_independent
+known_issues:
+  - key: partial_executable_path
+    dimension: security
+    expected_severity: medium
+    locator: {kind: rule, value: "B607"}
+    description: >-
+      `sendmail` is resolved through PATH, so anyone who can influence PATH for this
+      process -- a service unit, a shell profile, a container entrypoint -- chooses which
+      binary receives the report and runs as this user. An absolute path removes the
+      question.
+  - key: list_concat_in_loop
+    dimension: performance
+    expected_severity: low
+    locator: {kind: rule, value: "RUF005"}
+    description: >-
+      `values = values + [x]` allocates a new list per column, making the inner loop
+      quadratic in the column count where append is amortised constant.
+expected_outcome: accept
+forbidden_regressions:
+  - "a missing value must still render as an empty string"
+  - "an empty column list must still give one empty line per row"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. The only case in the set whose *performance* issue has a rule locator --
+  ruff reports RUF005 for the list concatenation -- which makes it the one place M1's
+  mechanical half covers the performance dimension.
+split: heldout

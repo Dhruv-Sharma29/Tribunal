@@ -1,0 +1,21 @@
+id: 015-os-system-backup
+category: security_only
+known_issues:
+  - key: command_injection
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "B605"}
+    description: >-
+      os.system runs its argument through a shell, and both `label` and `directory` are
+      concatenated into it, so either one containing a semicolon or a backtick executes
+      arbitrary commands as whatever user runs the backup -- typically a privileged one.
+expected_outcome: accept
+forbidden_regressions:
+  - "must still return the /var/backups/<label>.tar.gz path"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. Deliberately distinct from 001: os.system rather than subprocess with
+  shell=True, two injectable parameters rather than one, and a privileged context. Same CWE,
+  different shape -- a benchmark with one instance of each class measures nothing about
+  consistency.
+split: heldout

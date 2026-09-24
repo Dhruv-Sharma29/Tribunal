@@ -1,0 +1,22 @@
+id: 018-reread-template-per-row
+category: performance_only
+known_issues:
+  - key: reread_per_row
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [5, 6]
+      anchor: |-
+        with open(template_path, encoding="utf-8") as handle: template = handle.read()
+    description: >-
+      The template file is opened and read once per row. It does not change during the
+      loop, so this is one syscall pair and one full read per row where one read would do.
+expected_outcome: accept
+forbidden_regressions:
+  - "an empty rows list must still read nothing and return []"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. docs/07 names "redundant I/O" as a performance category. The empty-rows
+  behaviour is pinned because the obvious fix changes it.
+split: heldout

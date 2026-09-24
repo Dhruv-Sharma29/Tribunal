@@ -1,0 +1,43 @@
+# Route the tribunal to NVIDIA NIM's Nemotron reasoning models.
+#
+# Copy to `tribunal.toml` in the working directory, or pass `--config examples/nim.toml`.
+# Only the model is named: the provider follows from the price table, so the two cannot
+# disagree (see docs/14-providers.md § Routing agents).
+#
+# Needs NVIDIA_API_KEY from https://build.nvidia.com. The hosted developer endpoint is not
+# token-metered, which is why it is the cheapest way to exercise the critics end to end.
+#
+# `llama-3.3-nemotron-super-49b-v1.5` is dense 49B. The alternative,
+# `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`, is 30B with ~3B active per token: much
+# faster, and the right choice for a smoke run. Everything this tribunal asks a model to do --
+# re-rate a finding in context, decide whether two remedies actually conflict, adjudicate a
+# pushback -- is judgement rather than recall, and that tracks active parameters. Swap back
+# by changing the three `model` lines below; nothing else depends on which is used.
+
+[agents.redteam]
+model = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+effort = "high"
+max_tokens = 8000
+
+[agents.profiler]
+model = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+effort = "high"
+max_tokens = 8000
+
+[agents.coder]
+model = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+effort = "high"
+# Round >= 2 is the hard one: the Coder is reconciling two critics by then.
+effort_late_round = "xhigh"
+max_tokens = 8000
+
+[llm]
+# The shared hosted endpoint returns 503 ResourceExhausted under trivial concurrency, and the
+# two critics run in parallel by design. Retries absorb that.
+mode = "live"
+
+[providers.nim]
+key_env = "NVIDIA_API_KEY"
+base_url = "https://integrate.api.nvidia.com/v1"
+max_retries = 4
+timeout_seconds = 240.0

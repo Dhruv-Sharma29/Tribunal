@@ -1,0 +1,24 @@
+id: 012-archive-extract-path
+category: security_only
+known_issues:
+  - key: path_traversal
+    dimension: security
+    expected_severity: high
+    locator:
+      kind: line_range
+      value: [6, 6]
+      anchor: "target = os.path.join(destination_dir, member_name)"
+    description: >-
+      member_name comes from the archive, and os.path.join with a name containing ../ or a
+      leading slash resolves outside destination_dir entirely -- so an attacker-supplied
+      archive writes anywhere the process can.
+expected_outcome: accept
+forbidden_regressions:
+  - "must still create intermediate directories for nested members"
+  - "must still return the path it wrote"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. Zip Slip (CVE-2018-1002200 and the family around it). Chosen partly because
+  no tool in the grounding suite reports it -- bandit has no path-traversal check and ruff's
+  S-rules do not cover it -- so it tests whether a critic finds what the linters cannot.
+split: dev

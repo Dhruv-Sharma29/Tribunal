@@ -1,0 +1,21 @@
+id: 014-reset-token-randomness
+category: security_only
+known_issues:
+  - key: predictable_token
+    dimension: security
+    expected_severity: high
+    locator: {kind: rule, value: "S311"}
+    description: >-
+      random.choice draws from a Mersenne Twister seeded from system time; observing a few
+      hundred outputs recovers the state and predicts every later token, which for a
+      password-reset token is account takeover. secrets.choice is the fix.
+expected_outcome: accept
+forbidden_regressions:
+  - "must keep the requested length and the default of 32"
+  - "must keep using only the declared alphabet"
+runnable_benchmark: false
+provenance: >-
+  Hand-written. Chosen because `random` for tokens is the case where the tool's own severity
+  is usually LOW and the correct severity here is HIGH -- the re-rating this project claims
+  to add, in its clearest form.
+split: heldout

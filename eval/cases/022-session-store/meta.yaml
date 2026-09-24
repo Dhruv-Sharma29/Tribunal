@@ -1,0 +1,32 @@
+id: 022-session-store
+category: both_independent
+known_issues:
+  - key: insecure_temp_path
+    dimension: security
+    expected_severity: medium
+    locator: {kind: rule, value: "B306"}
+    description: >-
+      tempfile.mktemp returns a name and does not create the file, so anything can win the
+      race and place a symlink there first; the session id in the prefix makes the name
+      predictable, which removes the only obstacle. mkstemp creates it atomically.
+  - key: hash_object_per_entry
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [14, 14]
+      anchor: |-
+        digest = hashlib.sha256((digest + entry).encode("utf-8")).hexdigest()
+    description: >-
+      A fresh sha256 object, a string concatenation and a hex encode per entry, where one
+      hash object updated in a loop would do -- n allocations and n hex encodings instead
+      of one.
+expected_outcome: accept
+forbidden_regressions:
+  - "the fingerprint must stay order-dependent"
+  - "an empty entry list must still fingerprint to the empty string"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. Two unrelated functions in a plausible session module. The empty-list
+  behaviour is pinned because the obvious incremental-hash rewrite changes it.
+split: heldout

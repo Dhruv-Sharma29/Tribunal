@@ -1,0 +1,25 @@
+id: 017-recompile-per-line
+category: performance_only
+known_issues:
+  - key: recompile_in_loop
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [8, 8]
+      anchor: |-
+        pattern = re.compile(r"\bid=([A-Za-z0-9_-]+)")
+    description: >-
+      The pattern is constant but re.compile runs once per line. Python's internal regex
+      cache hides most of the cost until the cache is evicted by other patterns, at which
+      point this becomes a full recompile per iteration -- so the fix is to hoist it to
+      module scope rather than to rely on the cache.
+expected_outcome: accept
+forbidden_regressions:
+  - "must still return only ids whose value starts with the prefix"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. docs/07 names "repeated recompilation in a loop" as a performance category.
+  The detail that makes it worth writing up rather than just flagging is `re`'s internal
+  cache, which makes the naive benchmark show almost no difference.
+split: heldout

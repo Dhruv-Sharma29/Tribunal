@@ -1,0 +1,23 @@
+id: 019-deepcopy-defaults
+category: performance_only
+known_issues:
+  - key: deepcopy_per_job
+    dimension: performance
+    expected_severity: medium
+    locator:
+      kind: line_range
+      value: [14, 14]
+      anchor: "job = copy.deepcopy(TEMPLATE)"
+    description: >-
+      copy.deepcopy walks the structure and maintains a memo dict on every call. The
+      template is two levels deep and known statically, so an explicit construction -- or
+      one deepcopy reused as a prototype -- costs a fraction of it per job.
+expected_outcome: accept
+forbidden_regressions:
+  - "jobs must not share nested state with each other"
+  - "the module-level TEMPLATE must never be mutated"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. docs/07 names "unnecessary deep copy" as a performance category. Written as
+  the *correct* version of 009's bug on purpose -- this code is right, and only slow.
+split: heldout

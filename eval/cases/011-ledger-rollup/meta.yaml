@@ -1,0 +1,13 @@
+id: 011-ledger-rollup
+category: canary_clean
+known_issues: []
+expected_outcome: accept
+forbidden_regressions:
+  - "amounts must stay exact -- no float arithmetic on money"
+  - "largest must stay ordered largest-first and respect the limit"
+runnable_benchmark: true
+provenance: >-
+  Hand-written. Chosen as the canary a *performance* critic is most likely to spoil: Decimal
+  is slower than float, sorting is O(n log n) where a heap would be O(n log k), and both
+  observations are correct and wrong to act on.
+split: heldout
