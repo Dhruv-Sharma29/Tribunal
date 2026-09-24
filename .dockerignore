@@ -1,0 +1,32 @@
+# The build only COPYs pyproject.toml, constraints.txt, README.md and src/, so this file is
+# about how much gets shipped to the daemon rather than what lands in the image. A 60MB
+# context on every `docker build` is a slow edit-test loop for no benefit.
+#
+# One entry is a security exclusion rather than a size one: `.env`. It is in nobody's build,
+# but a stray `COPY . .` added later would put a credential in an image layer, and layers are
+# published.
+
+.env
+.env.*
+
+.venv/
+.git/
+.github/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Outputs, not inputs. `traces/` is a mount point at run time.
+traces/
+*.html
+*.zip
+
+# Not needed to build or run the tribunal; the image reviews code mounted at /code.
+tests/
+docs/
+examples/
+do.txt

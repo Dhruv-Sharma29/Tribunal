@@ -1,0 +1,73 @@
+# The one-command demo, and the two images kept apart.
+#
+#   docker compose build                        # the tribunal
+#   docker compose run --rm tribunal doctor
+#   docker compose run --rm tribunal run /code/examples/sql_injection.py \
+#       --config /code/examples/nim.toml
+#
+#   docker compose --profile sandbox build      # additionally, the execution image
+#
+# The sandbox image sits behind a profile because it has no long-running form -- the tribunal
+# starts one container per execution and tears it down -- and a profile keeps it out of
+# `docker compose up`. The cost is that a plain `build` skips it, hence the second line.
+#
+# The credential comes from the environment (or a .env file beside this one) and is never
+# written into an image, a build arg or a CLI flag -- see docs/08-packaging.md § Credentials.
+
+services:
+  # The tribunal. Holds the API key, can reach the network, never executes the target's code
+  # except through the sandbox.
+  tribunal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Both SDKs; `openai` is also what talks to NVIDIA NIM. Drop to "" for an image that
+        # can still ground, replay and view but cannot call a model.
+        PROVIDERS: all-providers
+    image: tribunal:latest
+    environment:
+      # Passed through from the host only if set. No default, and no value in this file:
+      # a key committed to a compose file is a key committed to the repository.
+      - ANTHROPIC_API_KEY
+      - OPENAI_API_KEY
+      - GEMINI_API_KEY
+      - NVIDIA_API_KEY
+      # Inside a container the tribunal is already isolated from the host, so this is the
+      # recommended configuration. `--sandbox=docker` from in here needs the host socket
+      # below, which is a real trade-off rather than a better default.
+      - TRIBUNAL_SANDBOX__MODE=subprocess
+    volumes:
+      # The code under review, read-only: the tribunal proposes diffs, it never writes to the
+      # input. Mounting it `:ro` makes that mechanical rather than a promise.
+      - ./:/code:ro
+      # The one writable mount. Traces, summary.jsonl and any rendered HTML land here, on the
+      # host, so they survive the container and can be opened by double-click.
+      - ./traces:/traces
+      # -- docker-out-of-docker, deliberately commented out ------------------------------
+      # Uncommenting this lets the tribunal start `tribunal-sandbox` containers, which is what
+      # `--sandbox=docker` needs from inside here. It also grants this container
+      # host-root-equivalent access: anything that can talk to the docker socket can start a
+      # privileged container mounting `/`. That is a worse exposure than the one it fixes,
+      # because the tribunal inside this container is *already* namespaced away from the host.
+      # Turn it on only when reviewing genuinely untrusted input, and know what it costs.
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # `doctor` exits non-zero when a grounding tool is missing, so a broken image fails its
+    # own smoke test rather than degrading a critic from grounded to opinion.
+    command: ["doctor"]
+
+  # The image that executes model-written code. No tribunal code, no prompts, no credential.
+  #
+  # Nothing here grants its isolation: `--network none`, `--read-only`, the noexec tmpfs and
+  # the cap/pid/memory limits are applied per-run by `sandbox.Sandbox._docker_argv`, which is
+  # where `tests/test_sandbox.py` can assert them. A compose entry that looked like it
+  # configured the sandbox would be the more dangerous kind of documentation.
+  #
+  # Built by `docker compose --profile sandbox build`; the tribunal then finds it by the image
+  # name in `SandboxConfig.docker_image`.
+  tribunal-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: tribunal-sandbox:latest
+    profiles: ["sandbox"]
