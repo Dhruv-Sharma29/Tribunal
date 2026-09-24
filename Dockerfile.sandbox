@@ -1,0 +1,29 @@
+# The image that executes model-written and user-supplied code.
+#
+# Deliberately separate from the (not yet built) runtime image so that ANTHROPIC_API_KEY never
+# exists in a namespace that runs untrusted code. This image contains no tribunal code, no prompts,
+# no config and no credentials -- only an interpreter and pytest.
+#
+# It is half the story. The other half is the `docker run` flags in `sandbox.Sandbox._docker_argv`
+# (--network none, --read-only, a noexec tmpfs, --cap-drop ALL, --pids-limit, --memory, --cpus).
+# A permissive `docker run` against this image is not isolated, so the flags are asserted in
+# tests/test_sandbox.py rather than left to a README instruction.
+FROM python:3.11-slim
+
+# uid 65534 already exists in Debian as `nobody`, so docs/05's `useradd -u 65534 -m runner`
+# fails the build with "UID 65534 is not unique". Reuse the existing account: the goal is an
+# unprivileged uid, and `nobody` is exactly that. It has no home directory, so make one --
+# without it, anything that resolves $HOME lands in / and fails against --read-only.
+RUN install -d -o 65534 -g 65534 /home/nobody \
+ && pip install --no-cache-dir pytest==9.1.1 pytest-timeout==2.4.0
+
+USER 65534:65534
+ENV HOME=/home/nobody \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+WORKDIR /work
+
+# `-I` is isolated mode: it ignores PYTHONPATH and the user site directory, so nothing on a
+# mounted volume can shadow a stdlib module. The orchestrator overrides the entrypoint to pass
+# an explicit argv, so this is the safe default for a bare `docker run`, not the hot path.
+ENTRYPOINT ["python", "-I"]

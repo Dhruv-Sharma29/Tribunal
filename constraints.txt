@@ -1,0 +1,33 @@
+# Exact versions for the container images.
+#
+# docs/08-packaging.md § Docker: "Pin tool versions in the image and print them in `doctor` --
+# `bandit` and `ruff` rule sets change between releases, and an unpinned image silently
+# invalidates the eval numbers."
+#
+# That is the whole reason this file exists, and it is not a general lockfile. `pyproject.toml`
+# keeps ranges on purpose so the package stays installable alongside other things; the *image*
+# is the artifact an eval number is attributed to, so it pins. A finding that appears because
+# a base image rebuilt with a newer `ruff` is indistinguishable from a finding the tribunal earned,
+# and `tribunal doctor` prints these so a published result can be traced to the rule sets
+# that produced it.
+#
+# Bump deliberately, and re-run the eval when you do.
+
+# -- grounding: the versions an eval number is attributed to ---------------------------------
+bandit==1.9.4
+ruff==0.16.7
+radon==6.0.1
+pytest==9.1.1
+pytest-timeout==2.4.0
+
+# -- runtime ---------------------------------------------------------------------------------
+pydantic==2.13.5
+pydantic-settings==2.15.0
+typer==0.27.2
+rich==15.0.0
+python-ulid==4.0.1
+pyyaml==6.0.3
+
+# -- provider SDKs (installed only by the `all-providers` build arg) --------------------------
+anthropic==1.6.0
+openai==3.14.1

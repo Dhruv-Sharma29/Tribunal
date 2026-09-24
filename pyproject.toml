@@ -1,0 +1,85 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tribunal"
+version = "0.1.0"
+description = "An adversarial multi-agent code reviewer with a deterministic decision layer."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.9",
+    "pydantic-settings>=2.4",
+    "typer>=0.12",
+    "rich>=13.7",
+    "python-ulid>=2.7",
+    "bandit>=1.7",
+    "ruff>=0.6",
+    "radon>=6.0",
+    "pytest>=8.0",
+    "pytest-timeout>=2.3",
+    # `meta.yaml` in the eval cases. Already present transitively via bandit, so
+    # this declares what is imported rather than adding weight.
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Provider SDKs are optional extras and are imported lazily, so `tribunal ground`,
+# `doctor` and the whole Phase 1 layer work with none of them installed.
+anthropic = ["anthropic>=1.0"]
+openai = ["openai>=2.0"]
+gemini = ["google-genai>=2.0"]
+# NVIDIA NIM speaks the OpenAI protocol, so it needs no SDK of its own.
+nim = ["openai>=2.0"]
+all-providers = ["anthropic>=1.0", "openai>=2.0", "google-genai>=2.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
+# `>=2.0` rather than unpinned: 1.x exposes `FastMCP`, which this server does not use, and
+# the failure would otherwise land at import time in a host's stdio pipe where nobody sees
+# it. See src/tribunal/mcp_server.py.
+mcp = ["mcp>=2.0"]
+
+[project.scripts]
+tribunal = "tribunal.cli:app"
+# A separate entry point, not a `tribunal mcp` subcommand: a host launches this and then
+# owns the process's stdout, so anything else the CLI might print there corrupts the
+# protocol stream.
+tribunal-mcp = "tribunal.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tribunal"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# The benchmark cases contain *planted* defects -- that is their entire purpose -- so linting
+# them reports the fixture working as designed, and inviting `--fix` on them would quietly
+# delete the thing each case exists to test. CI runs `ruff check src tests`; this exclude is
+# so that the obvious `ruff check .` agrees with it.
+#
+# Safe because the grounding suite shells out to ruff with `--isolated`, which ignores every
+# pyproject.toml on the filesystem. An exclude here cannot remove a finding from a case.
+# `extend-exclude`, not `exclude`: the latter REPLACES ruff's defaults, which is how a
+# one-line tidy-up turns `ruff check .` into a lint of the entire virtualenv.
+extend-exclude = ["eval/cases"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+# Live-API tests are opt-in. The default run makes zero API calls.
+addopts = "-m 'not live'"
+markers = [
+    "live: hits a real provider API; requires a credential and costs money",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# These files exist to be found by the grounding tools. Linting them defeats the purpose:
+# `vulnerable.py` must keep its `%`-formatted SQL, and `clean.py` must stay exactly as clean
+# as the canary test asserts.
+"tests/fixtures/*" = ["ALL"]
+# The demo input for the README. Same reason.
+"examples/sql_injection.py" = ["ALL"]

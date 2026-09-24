@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Credentials. The config file holds no secrets by design -- `providers.*.key_env` names an
+# environment variable rather than carrying a key (docs/14) -- but a stray .env does.
+.env
+.env.*
+!.env.example
+.envrc
+
+# --------------------------------------------------------------------------------------
+# Run output
+# --------------------------------------------------------------------------------------
+# Local traces from `tribunal run`, and the HTML `tribunal view` writes next to them.
+#
+# LEADING SLASH IS LOAD-BEARING. A bare `traces/` matches a directory of that name at ANY
+# depth, which would also ignore `eval/results/<ts>/traces/` -- the per-run traces inside a
+# committed sweep. Those are not scratch output: `tribunal eval --replay` re-scores a sweep
+# *from its traces*, RUNBOOK step 3 says to commit the results directory, and the nightly
+# regression gate reads a promoted one. Ignoring them would produce a repository where
+# --replay reports "no traces to re-score" on a results directory that is visibly right
+# there. Verified with `git check-ignore -v` rather than assumed.
+/traces/
+
+# Sweeps are evidence and ARE committed -- deliberately not ignored:
+#   eval/results/<ts>/{raw.jsonl,summary.md,report.html,traces/}
+#   eval/results/baseline/raw.jsonl   <- the nightly's regression gate
+#   eval/judge-kappa.json             <- heldout.yml refuses to run without it
+#   tests/cassettes/                  <- what makes the test suite run with no credential
+# A score with no run behind it is not evidence (docs/07).
+
+# Scratch HTML rendered outside a trace directory via `tribunal view -o`.
+/*.html
