@@ -1,0 +1,93 @@
+# The nightly dev-split run. This is the only workflow that holds a credential.
+#
+# docs/07-evaluation.md § CI integration: "Nightly on `main`: dev split, live, posts the
+# summary as a commit comment; fails on regression beyond a threshold in M4."
+#
+# A `schedule` trigger only ever runs from the default branch of this repository, so a fork
+# cannot cause it to run and cannot reach `secrets`. `workflow_dispatch` is restricted to
+# users with write access. Neither can be triggered by a pull request, which is what keeps
+# the key out of reach of `ci.yml`.
+
+name: nightly
+
+on:
+  schedule:
+    # 03:00 UTC. Far from anyone's working hours, so a failure is read in the morning
+    # rather than mistaken for something the current change did.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Needed only to leave the summary as a commit comment.
+  issues: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  dev-split:
+    name: dev split, live
+    runs-on: ubuntu-latest
+    # A sweep that hangs must not burn a six-hour runner.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -c constraints.txt -e ".[all-providers]"
+
+      - name: doctor
+        # Runs first and exits non-zero on a missing grounding tool. A sweep on a box where
+        # `bandit` is absent silently degrades every critic from grounded to opinion and
+        # produces numbers that look real.
+        run: tribunal doctor
+
+      - name: sweep
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          tribunal eval --split dev --arms B1,B3 --results eval/results
+          echo "RESULTS=$(ls -d eval/results/* | sort | tail -1)" >> "$GITHUB_ENV"
+
+      - name: check for an M4 regression
+        # M4 only. M1 and M2 depend on the judge, and until its kappa is published a move
+        # in either is not attributable to the tribunal — it could be the judge. Gating on an
+        # unvalidated instrument fails for reasons nobody can act on.
+        run: |
+          if [ -f eval/results/baseline/raw.jsonl ]; then
+            python scripts/check-regression.py \
+              --baseline eval/results/baseline/raw.jsonl \
+              --current "$RESULTS/raw.jsonl"
+          else
+            echo "no committed baseline at eval/results/baseline/ — nothing to compare."
+            echo "Promote a sweep to the baseline once the thresholds are frozen."
+          fi
+
+      - name: upload the results directory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval/results/
+          retention-days: 30
+
+      - name: post the summary as a commit comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const dirs = fs.readdirSync('eval/results').filter(d => d !== 'baseline').sort();
+            if (dirs.length === 0) return;
+            const body = fs.readFileSync(`eval/results/${dirs[dirs.length - 1]}/summary.md`, 'utf8');
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body,
+            });

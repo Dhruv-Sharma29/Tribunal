@@ -1,0 +1,87 @@
+# The per-PR gate. Fast, offline, and it never sees a credential.
+#
+# docs/07-evaluation.md § CI integration: "Per PR: unit tests + --smoke (4 cases,
+# cassette-replayed, zero API calls, < 60s)." Full sweeps are ~$25 and ~30 minutes and do
+# not belong here.
+#
+# **No secret is referenced in this file, and the trigger is `pull_request`, not
+# `pull_request_target`.** That is the whole security design: `pull_request` runs a fork's
+# code without the repository's secrets, and `pull_request_target` runs it *with* them, in
+# the base repo's context. Swapping one for the other is a one-word change that hands the
+# API key to anyone who can open a pull request.
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# A new push supersedes the old run rather than queueing behind it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: lint + tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor from pyproject, and the version the images build on.
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: install
+        # `-c constraints.txt` so CI grounds on the versions the images pin. Without it a
+        # new `bandit` release turns a green suite red on a commit that changed nothing,
+        # and the golden files would be "fixed" to match a tool nobody chose.
+        run: pip install -c constraints.txt -e ".[dev]"
+      - name: ruff
+        run: ruff check src tests
+      - name: pytest
+        # `-m "not live"` is the default in pyproject, so this makes zero API calls.
+        run: pytest -q
+      - name: exit-code contract
+        run: ./scripts/check-exit-codes.sh
+
+  benchmark:
+    name: benchmark cases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -c constraints.txt -e .
+      - name: every case loads, and every locator still fires
+        # `--dry-run` runs the real grounding suite over all 24 cases: a `rule` locator
+        # naming a code the tools no longer emit fails here rather than turning into a
+        # silent miss in a results table months later.
+        run: tribunal eval --dry-run
+
+  smoke:
+    name: smoke (cassette-replayed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -c constraints.txt -e ".[all-providers]"
+      - name: four cases, zero API calls
+        # This job FAILS until cassettes for the eval requests are recorded and committed.
+        # That is deliberate: a gate that passes when it cannot do its job is worse than
+        # one that is red, and the command says exactly how to arm it.
+        run: tribunal eval --smoke --arms B1,B3

@@ -1,0 +1,26 @@
+[
+  [
+    "radon",
+    "CC-C",
+    "complex.py",
+    4,
+    31,
+    "C"
+  ],
+  [
+    "radon",
+    "CC-SUMMARY",
+    "complex.py",
+    null,
+    null,
+    null
+  ],
+  [
+    "ruff",
+    "C901",
+    "complex.py",
+    4,
+    4,
+    "error"
+  ]
+]

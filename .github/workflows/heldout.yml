@@ -1,0 +1,82 @@
+# The held-out sweep. Manual, deliberate, and never automatic.
+#
+# docs/07-evaluation.md § CI integration: "Per milestone, manual: held-out sweep. Commit the
+# results directory." And § Provenance: "run held-out once per milestone, and report every
+# held-out run you did — not the best one."
+#
+# It is `workflow_dispatch` only for that reason. A held-out sweep that ran on a schedule
+# would accumulate attempts nobody reports, which is the failure the split exists to
+# prevent. Running this is a decision someone makes and signs their name to.
+
+name: heldout
+
+on:
+  workflow_dispatch:
+    inputs:
+      arms:
+        description: "Arms to run (docs/09's cut line keeps B1,B3)"
+        default: "B1,B3"
+        required: true
+      reason:
+        description: "Why this sweep is being run — recorded in the run log"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: heldout
+  cancel-in-progress: false
+
+jobs:
+  heldout:
+    name: held-out sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -c constraints.txt -e ".[all-providers]"
+
+      - name: record why
+        run: |
+          echo "### Held-out sweep" >> "$GITHUB_STEP_SUMMARY"
+          echo "arms: ${{ inputs.arms }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "reason: ${{ inputs.reason }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "requested by: ${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: refuse to run against an unvalidated judge
+        # docs/07: "If κ < 0.6, fix the judge rubric before running anything on held-out."
+        # The held-out split can only be spent once per milestone, and spending it on
+        # numbers whose judge nobody has measured wastes the one thing that cannot be
+        # re-run.
+        run: |
+          if [ ! -f eval/judge-kappa.json ]; then
+            echo "::error::no eval/judge-kappa.json — the judge has not been validated."
+            echo "Hand-label 30 issue/outcome pairs from dev-split runs and publish the kappa first."
+            exit 1
+          fi
+          python - <<'PY'
+          import json, sys, pathlib
+          k = json.loads(pathlib.Path("eval/judge-kappa.json").read_text())["kappa"]
+          print(f"judge kappa = {k}")
+          if k < 0.6:
+              sys.exit("::error::kappa < 0.6 — fix the judge rubric before spending the held-out split.")
+          PY
+
+      - name: sweep
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: tribunal eval --split heldout --arms "${{ inputs.arms }}" --judge
+
+      - name: upload the results directory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: heldout-results
+          path: eval/results/
+          retention-days: 90
