@@ -1,0 +1,319 @@
+tribunal — what's left
+========================
+Last updated: 2026-09-24 (MCP server + the two guides built; CLI exit-code help fixed)
+
+Baseline: Phases 1-6 built, plus Phase 7's MCP server. All five agents, the eval harness
+(24 cases, 4 arms, judge, kappa workflow), CI, the viewer, Docker, the progress renderer,
+start.md and REMAINING.md. 1,700+ tests green; zero API calls by default; ruff clean.
+
+EVERY remaining step needs a credential or a docker daemon -> RUNBOOK.md has the commands,
+REMAINING.md has the reasoning. Nothing offline is unbuilt, and nothing offline is
+knowingly broken.
+
+Reading order: this file is the chronological working plan (what got built, in order, with
+what each thing cost). REMAINING.md is the ledger (what is NOT done, split into blocked /
+skipped-on-purpose / found-and-left). They are kept in sync by tests/test_start_doc.py.
+
+
+DONE — the Arbiter (Phase 2 leftover)
+-------------------------------------
+Why it came first: detector 2 (same-span trade-off) could not fire without an Arbiter to
+affirm the pair, and the Coder's pushback was never adjudicated. Publishing eval numbers
+without it would have measured a different system than the docs describe.
+
+Built:
+  - contracts.py      ConflictAffirmation; Report.tradeoff_justification /
+                      .recommended_default
+  - policy.py         same_span_candidates() + same_span_conflict() split out of
+                      detect_same_span_conflict(), so a specific pair can be affirmed
+  - config.py         agents.arbiter_affirm (medium effort, separate from arbiter's xhigh)
+  - bundle.py         ArbiterBundle, AffirmationBundle
+  - prompts/          arbiter.md v1, arbiter_affirm.md v1
+  - agents/arbiter.py Arbiter (note) + ConflictAffirmer (affirmation), sharing one client
+  - validation.py     validate_arbiter_note, validate_affirmation
+  - orchestrator.py   affirm before decide, note after; dismissals flow into PolicyInput,
+                      CritiqueBundle and CoderBundle; templated path kept working
+  - trace/report.py   picks up the trade-off prose from the trace
+  - cli.py            builds the Arbiter by default; --no-arbiter for the templated path
+
+Tests: 1297 passing (was 1264), zero API calls. tests/test_arbiter.py is new (28);
+tests/test_orchestrator.py gained 5, including an Arbiter that DECLINES to affirm and a
+3-round run proving a dismissal leaves the pressure sum and reaches the critics.
+Docs updated: docs/09 Phase 2 status, docs/13 §§ 26-29 plus two unnumbered notes, README
+status paragraph and a new "The Arbiter, on both sides of the decision" section.
+
+
+DONE — the Postmortem (Phase 2, last agent)
+-------------------------------------------
+Built:
+  - contracts.py      PostmortemNote + RoundSummary; Report.narrative
+  - bundle.py         PostmortemBundle + RoundDigest (compacted trace, no raw prompts)
+  - prompts/          postmortem.md v1
+  - agents/           Postmortem
+  - validation.py     validate_postmortem -- outcome echo, round coverage, and the check
+                      that every open issue and unassessed dimension is disclosed
+  - trace/report.py   render_narrative (layout lives here, not in the model) and
+                      postmortem_bundle (same compaction live and from a file on disk)
+  - trace/events.py   tool_run now carries `measurements` -- perf produces no ToolOutcome,
+                      so benchmark results had never reached the trace at all
+  - orchestrator.py   runs in the POSTMORTEM state, after the last budget check
+  - cli.py            --no-postmortem, and a `tribunal postmortem <trace>` command
+
+Key design call: the agent emits a NOTE, not a Report. A second report-builder next to
+trace/report.build would end criterion S6. The note goes in the trace, the markdown is
+rendered on the read side, and Report.narrative is derived like every other field -- so
+replay stays byte-identical with an LLM in the loop. See docs/13 §§ 30-33.
+
+Tests: 1327 passing (was 1297). tests/test_postmortem.py is new (22);
+tests/test_orchestrator.py gained 7.
+
+
+CASSETTES — the one thing outstanding from Phase 2
+---------------------------------------------------
+  [ ] arbiter/v1, arbiter_affirm/v1 and postmortem/v1 have live tests but NO recordings.
+      REPLAYABLE knows all three schemas, so recording is:
+          NVIDIA_API_KEY=... pytest -m live -k "arbiter or postmortem"
+      The one place the roadmap's own advice -- record as you build, not in a batch --
+      is not yet satisfied. Do it before the prompts drift.
+
+
+DONE — the viewer (Phase 4)
+---------------------------
+Built:
+  - viewer/__init__.py        render() / write(); one-pass placeholder fill; blob escaping
+  - viewer/assets/shell.html  the skeleton, with the JSON blob embedded not fetched
+  - viewer/assets/viewer.css  critics as a 2-col grid; the policy box visually dominant
+  - viewer/assets/viewer.js   5 tabs, vanilla, never touches innerHTML
+  - cli.py                    `tribunal view <trace> [-o out.html] [--no-open]`
+  - tests/viewer_dom.js       ~150-line DOM shim so the tests RUN the viewer's script
+
+Tabs: Timeline (write-up + state/agent waterfall + the parallel marker), Debate (the
+main event), Diffs (each round beside the previous one), Grounding, Cost.
+Extras the trace already supported: pressure sparkline, uncitable measurements marked
+as such, a zero-cache-read warning.
+
+The DOM harness found 3 real bugs on first run (docs/13 § 37) -- the sparkline drew its
+last point twice, 0ms calls vanished from the timeline along with the parallel marker,
+and an errored critic showed its exception instead of "nobody assessed this".
+
+DONE (files) — Docker packaging (Phase 4)
+------------------------------------------
+  - Dockerfile              multi-stage; venv copied to a slim runtime; uid 65534;
+                            no credential in any layer; ENTRYPOINT tribunal, CMD doctor
+  - constraints.txt         exact pins for the grounding tools + runtime deps.
+                            pyproject keeps RANGES on purpose; only the images pin.
+  - docker-compose.yml      /code read-only, /traces the only writable mount, keys passed
+                            through by name, docker.sock present but COMMENTED OUT
+  - .dockerignore           tightened; excludes .env
+  - scripts/verify-docker.sh  builds both images and checks the separation, the pins,
+                            the mounts, the uid, and the layer history for keys
+  - tests/test_packaging.py 26 tests over the files themselves (no daemon needed)
+
+  !! criterion S7 is NOT yet verified. This machine has no docker daemon, so the images
+     have NEVER BEEN BUILT. Before claiming S7:
+         ./scripts/verify-docker.sh              # build + credential-free checks
+         ./scripts/verify-docker.sh --with-llm   # one real run; needs NVIDIA_API_KEY
+     Expect to fix something on first run -- an unbuilt Dockerfile is a hypothesis.
+     The script's own greps WERE validated against real `doctor` output, with a
+     negative control, but the rest of it is unexercised.
+
+DONE — the rich progress renderer (Phase 4)
+--------------------------------------------
+  - progress.py           ProgressRenderer: a TraceWriter SUBSCRIBER, not a second code
+                          path. -q removes it and the recorded run is identical.
+  - orchestrator.py       `subscribers=[...]`, attached to the writer at run start
+  - cli.py                --quiet / -q
+  - tests/test_progress.py  18 tests, every one driven by a real run
+
+Two outputs from one state machine: a rich.Live on a terminal, one line per step when
+redirected (chosen on console.is_terminal, not on a flag). Both critics render on ONE
+line with a "parallel" marker -- that is the concurrency claim, made visible for free.
+
+Two bugs worth remembering (docs/13 §§ 42-43):
+  * a state event's `round` is the round IN PROGRESS, not the one being entered, and the
+    Coder's llm_response arrives BEFORE its PROPOSE state. Rows are built from content
+    events, never from state transitions.
+  * a printed line cannot be taken back: flushing per event made `grounding` print after
+    its first tool and `critique` print after its first critic -- losing the second one,
+    on the line whose entire job is showing two at once.
+
+PHASE 4 — what is left
+----------------------
+[ ] run ./scripts/verify-docker.sh on a machine with docker, fix whatever it finds,
+    then tick S7 in docs/09  <-- the ONLY thing left in Phase 4
+[x] DONE: scripts/check-exit-codes.sh -- 15 checks, offline, and it HAS been run.
+      Writing it found two real things (docs/13 §§55-56):
+      * exit codes 3 (FAILED) and 4 (BUDGET_EXHAUSTED) were UNREACHABLE. Both
+        input_unusable and budget_exhausted are Decision.ESCALATE, and the exit code was
+        derived from the Decision alone. A pipeline keyed on 4 to page about cost would
+        never have fired. Fixed via Report.terminal_state (TerminalState was declared in
+        contracts and used nowhere -- a third dead definition, same family as §§44-45)
+        and an ordered exit_code_for().
+      * `replay` exited 0 on a failed run, so the contract could only be tested by
+        spending money. replay now exits with the outcome of the run it reports, which
+        is right anyway and makes the matrix checkable from 5 committed trace fixtures
+        (tests/fixtures/traces/).
+      docs/08's `5` for usage resolved in favour of the code's `64` (EX_USAGE); a sixth
+      outcome would have collided with 5.
+
+
+PHASE 5 — evaluation (STARTED)
+-------------------------------
+DONE — the foundation the cases validate against:
+  - eval/case.py      EvalCase/CaseMeta/KnownIssue/Locator + a STRICT loader. Every rule
+                      docs/07 states in prose is enforced: canary_clean has no known
+                      issues, conflicting expects tradeoff AND needs one issue per
+                      dimension, seeded_bad needs a HIGH security issue, rule codes must
+                      look like rule codes, line ranges must be inside the file and point
+                      at code, notes.md must be non-empty, before.py must parse.
+  - eval/scoring.py   mechanical M1/M3/M4/M5/M6/M7/M8. NO judge, no API calls, all
+                      reproducible from a trace. Counts, never rates.
+  - eval/cases/       24 of 24 -- docs/07's composition EXACTLY, 8 dev / 16 heldout:
+      security_only (6)      001 shell=True · 012 Zip Slip* · 013 yaml.Loader ·
+                             014 random for a reset token · 015 os.system ·
+                             016 hardcoded HMAC key*
+      performance_only (5)   002 membership+concat* · 017 recompile* · 018 reread I/O* ·
+                             019 deepcopy* · 020 list.index*
+      both_independent (4)   021 assert-auth + concat · 022 mktemp + hash-per-entry ·
+                             023 SSRF + sort-in-loop · 024 PATH mailer + RUF005
+      conflicting (3)        003 · 008 (cleanest) · 009 (RE-EXAMINE before held-out)
+      canary_clean (3)       004 · 010 (baits security) · 011 (baits the Profiler)
+      canary_seeded_bad (3)  005 eval() · 006 hardcoded token · 007 pickle
+      (* = no tool reports it; line-range locator)
+
+  !! docs/13 §54: of 29 declared defects, 14 have a rule locator and 13 of those are
+     SECURITY. The performance dimension is almost entirely ungrounded -- ruff's PERF
+     rules do not cover wrong data structures, invariant work in loops, redundant I/O or
+     deepcopy. So M1 is two metrics wearing one name, and the results table must not let
+     security and performance recall be read as equally well evidenced. The summary
+     already prints the mechanical share on its own row.
+
+[x] DONE: the kappa WORKFLOW (the number still needs a credential -- RUNBOOK.md step 4).
+      `tribunal judge-labels <results>`  offline, seeded sample of the judge's REAL
+                                           workload, carries no judge verdict (labelling
+                                           after seeing one is anchoring)
+      `tribunal judge-kappa`             runs the judge, writes eval/judge-kappa.json,
+                                           exits non-zero below 0.6
+    This closed a producer gap I had created: heldout.yml refuses to run without
+    judge-kappa.json and NOTHING wrote it -- the same consumer-with-no-producer bug the
+    README's design notes are about. Same for the nightly's baseline:
+    ./scripts/promote-baseline.sh now produces eval/results/baseline/.
+[~] judge with schema output -- BUILT (eval/judge.py, prompts/judge.md, blinded,
+    guarded). Only the KAPPA NUMBER is outstanding: needs 30 hand labels from live
+    dev-split runs. RUNBOOK.md step 4. DO THIS BEFORE the held-out run.
+[ ] freeze Severity.weight, accept_threshold, no_progress_epsilon on the dev split only,
+    then record them. Changing them later invalidates every published number.
+[x] runner with concurrency and --replay -- DONE. `--smoke` is built and FAILS on
+    purpose until cassettes exist (RUNBOOK.md step 2).
+[ ] one held-out sweep across the arms -> eval/results/<ts>/  (criterion S5)
+[x] nightly GitHub Actions -- DONE (.github/workflows/nightly.yml). Key in secrets,
+    unreachable from fork PRs, and tests/test_ci.py asserts that.
+
+
+PHASE 6 — docs, demo, polish
+----------------------------
+README already leads with the problem and the jq output. Missing:
+[x] Design decisions section -- DONE, in the README. Five parts, including "what I
+    would do differently", which leads with the consumer-with-no-producer bug class
+    (7 instances by the end).
+[ ] demo GIF of a real run ending in TRADEOFF (the accept path is the boring one)
+    -- the viewer now exists to record it against
+[ ] eval results table with n, caveats and the cost row
+[ ] CI badge
+
+
+PHASE 7 — IDE integration (optional)
+------------------------------------
+MCP server -> AGENTS.md -> VS Code extension. Skip entirely unless 0-6 are polished.
+[verify] at implementation time: per-host MCP config locations, which hosts read a root
+AGENTS.md and how precedence works, OTel gen_ai.* names. All three have churned.
+
+[x] DONE: MCP server. src/tribunal/mcp_server.py, `pip install -e '.[mcp]'`, entry point
+    `tribunal-mcp` (separate script, not a subcommand: the host owns stdout). Two tools,
+    review_code and get_trace, both returning markdown rather than a JSON wall. allow_exec
+    off by default and a test_path without it is REFUSED, not silently honoured.
+    32 tests drive the real tools through server.call_tool() against a scripted provider --
+    the full tribunal, zero API calls.
+    The [verify] above paid off exactly as intended: docs/08's sketch was mcp 1.x and does
+    not import on the installed 2.2.0 (FastMCP -> MCPServer, inputSchema -> input_schema).
+    An hour of probing, two import lines, no design change. docs/13 §63.
+[ ] AGENTS.md -- SKIPPED deliberately. Its content is per-host conventions that cannot be
+    checked from here (no network), so it would be [verify] markers all the way down.
+    Writing one that guesses is worse than not writing one.
+[ ] VS Code extension -- SKIPPED. docs/08 §"VS Code extension" already argues it is the
+    same capability as the MCP server with more maintenance.
+
+
+HOUSEKEEPING
+------------
+[x] DONE: start.md -- the getting-started guide. Install, grounding, the loop, the trace,
+    how the decision is actually made, exec safety, MCP, the benchmark, troubleshooting.
+    tests/test_start_doc.py checks it against the code: commands, flags, the exit-code
+    table, the arm table, the decision-table size, links, and the MCP signature. It found
+    four wrong claims on its first run (docs/13 §67), incl. the arm labels and a missing
+    `reject` row in the exit codes.
+[x] DONE: `run --help` omitted `reject` from the exit-code table. Both `reject` and
+    `escalate` exit 2, so a rejected final patch exited with a code the help named as
+    something else. Now lists all six codes incl. 64/USAGE, and says why 2 covers two
+    outcomes. `replay` also gained the sentence it never had: it exits with the code for
+    the run IN THE TRACE, so a recorded run can be re-checked in CI without re-running it.
+    How it closed is the point (docs/13 §69): the entry in REMAINING.md shipped WITH a test
+    asserting in both directions, so fixing the help text turned the ledger red with
+    "REMAINING.md §C1 is stale, delete it". A doc about outstanding work rots worse than an
+    ordinary stale doc -- a resolved entry makes every neighbouring entry less believable.
+[x] DONE: README status paragraph was stale ("Phases 1-3 done", "1393 tests"). Rewritten;
+    test count now a FLOOR, checked against a real collection.
+[x] DONE: `ruff check .` was reporting the benchmark's planted defects -- 5 of them
+    [*]fixable, i.e. `--fix` would have deleted what the cases test. extend-exclude, and a
+    test pinning that grounding runs ruff `--isolated` so the exclude can't disarm a case.
+[x] DONE: docs/09 Phase 0 boxes struck through, each annotated with what actually closed
+    it. Only the cache-read NUMBER is outstanding (needs a live sweep; RUNBOOK.md).
+[x] DONE: swept every read-but-never-written field before Phase 5 measures anything.
+    Three real (docs/13 §§ 44-46):
+      * PolicyInput.input_parses was never set AND had no FSM edge to fire through, so a
+        non-Python input went through grounding + coder + 2 critics before anything
+        noticed. Added GROUND -> FAILED (docs/01's prose described it; its diagram did
+        not) and Trigger.INPUT_UNUSABLE.
+      * CritiqueBundle.patch was never passed, so the R1 sycophancy mitigation rendered
+        NOTHING on every real run -- critics never saw the Coder's rationale or pushback.
+        This one would have made an R1 measurement in Phase 5 meaningless.
+      * fixing the first reproduced docs/13 §24 in miniature: run_end.rounds_used
+        (len(history)) vs Report.rounds_used (max verdict round) disagreed 0 vs 1.
+        run_end now derives from the verdict; a test pins all three fields matching.
+[x] DONE: `--error PATH|-` built and threaded CLI -> Orchestrator -> CoderBundle.
+    `-` reads stdin, so `pytest 2>&1 | tribunal run thing.py --error -` works.
+    Argument validation runs BEFORE the provider check: a typo'd path should produce a
+    message about the typo, not about credentials.
+
+
+WHAT IS ACTUALLY LEFT  (the unticked boxes above, consolidated -> REMAINING.md)
+-------------------------------------------------------------------------------
+[A] Blocked on environment -- 10 items, all BUILT and tested against a scripted provider,
+    none ever RUN. A1 verify-docker (daemon, closes S7) - A2 record cassettes (key; the
+    cheapest one, turns the red `smoke` gate green) - A3 dev sweep (key, ~$22-28) - A4
+    judge kappa (A3 + a human labelling 30 rows BEFORE seeing the judge) - A5 freeze
+    thresholds - A6 promote baseline - A7 held-out sweep, ONCE (closes S5) - A8 register the
+    MCP server in a host - A9 results table / demo GIF / CI badge - A10 the criteria
+    table.
+    S3 and S6 are DONE. S6 by construction: one report.build, both paths call it.
+    S8 needs two people ("Ask two people. Actually do this."). I am not two people, and I
+    wrote the README, which disqualifies me twice.
+[B] Deliberately skipped -- AGENTS.md and the VS Code extension. Reasoning in REMAINING.md
+    §B; both are calls, not blockers, so overrule freely.
+[C] Found and left -- EMPTY. The one entry (cli help) closed above.
+
+Worth keeping in mind when running [A]: those are code paths that have NEVER executed
+against a real provider, which is exactly the condition in which this project's dominant
+bug survives -- a consumer written against a field nothing populates, seven instances,
+every one with passing tests. Expect A1-A3 to find something. That is what running them
+is for.
+
+
+THE CUT LINE (decide in advance, in order)
+------------------------------------------
+1. OpenTelemetry exporter        4. 24 -> 16 cases (keep all conflicts and canaries)
+2. --sandbox=docker              5. Postmortem agent -> drop it (--no-postmortem already does)
+3. baselines B0 and B2           6. trade-off detector 2 (same-span)
+
+Never cut: the policy layer, the trace, the TRADEOFF state, the canary cases, the
+sandbox's Layer-1 default-off execution.
