@@ -299,14 +299,8 @@ class Sandbox:
 
     def _docker_argv(self, argv: Sequence[str], workdir: Path) -> list[str]:
         cfg = self.config
-        # _build_env() scrubs PATH down to "/usr/bin:/bin" for the process this argv launches --
-        # correct for the *sandboxed* target, but that same call also launches `docker` itself,
-        # and Docker Desktop's CLI on macOS lives at /usr/local/bin/docker (Homebrew's symlink
-        # target), outside that scrubbed PATH. Resolve the absolute path from the *current*
-        # process's real PATH so the scrub doesn't also hide the docker binary from itself.
-        docker_bin = shutil.which("docker") or "docker"
         return [
-            docker_bin,
+            "docker",
             "run",
             "--rm",
             # The flag that actually matters: no exfiltration, and no "download stage 2".

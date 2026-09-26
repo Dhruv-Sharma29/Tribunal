@@ -4,15 +4,19 @@ A single honest ledger of everything outstanding. It exists because "remaining w
 "work I chose not to do" and "work I could not do here" are three different claims, and a
 checklist that mixes them tells a reader nothing.
 
-Three categories, in descending order of how much they should bother you:
+Four categories, in descending order of how much they should bother you:
 
 - **[A] Blocked on environment** — built, tested against a scripted provider, never *run*.
   Needs an API key or a Docker daemon. This machine has neither.
 - **[B] Deliberately not built** — a judgment call, with the reasoning, so you can overrule it.
 - **[C] Found and left** — I knew about it and did not fix it. **Now empty.**
+- **[D] Worth building next** — nothing is blocking these and nothing is wrong with them
+  missing. They are ranked, with what each one buys. Added when `tribunal code` landed,
+  because a surface that new has obvious next moves and a ledger that only records
+  *blocked* and *rejected* has nowhere to put them.
 
 **Nothing offline is unbuilt, and nothing offline is knowingly broken.** Every piece of
-machinery that can be written and tested without a credential is written and tested: 1,700+
+machinery that can be written and tested without a credential is written and tested: 1,800+
 tests, ruff clean, zero API calls by default. What remains is almost entirely *execution*, not construction — which is a
 comfortable position to be in, and also the position in which it is easiest to overstate how
 finished something is. Hence this file.
@@ -139,6 +143,36 @@ says so rather than leaving a gap where one should be.
 | **S7** one command on a clean machine | needs A1 |
 | **S8** a reader can explain the disagreement handling after reading the README | **needs two people.** The charter says *"Ask two people. Actually do this."* I am not two people, and I wrote the README, which disqualifies me twice. |
 
+### A11. Run the coding agent against a real model
+
+**Needs:** an API key. **Unblocks:** the only open question about `tribunal code`.
+
+The tool loop, the workspace boundary, approval, undo and the whole NIM wire path are
+exercised end to end — against a local endpoint speaking the real OpenAI protocol, which
+covers the SDK, `reasoning_effort`, the `json_schema` response format, `reasoning_content`,
+the inline `<think>` recovery and a 503 retry. A two-bug fixture went from `2 failed` to
+`2 passed` with the agent driving.
+
+What has never happened: **a real model emitting a `Step`.** Every step in every test was
+scripted. The open question is narrow and measurable — can a given model reliably fill a
+flat, one-tool-per-turn schema, and does it pick sensible tools — and it is exactly the
+condition this file warns about at the bottom: a code path that has never met a real
+provider.
+
+`--log session.jsonl` records `parse_retries`, `structure` and `duration_ms` per step, so
+the answer is a number from the first run rather than an impression. Two failure shapes to
+watch for specifically:
+
+- a rising `parse_retries` on the smaller models, which would mean the flat schema is too
+  wide for them and the tool set should shrink;
+- `structure: extracted` on every row, which would mean the JSON is arriving wrapped in
+  prose and being recovered — working, but a round-trip more expensive than it looks.
+
+```bash
+NVIDIA_API_KEY=… tribunal code --config examples/nim.toml --log /tmp/session.jsonl \
+  --print --yes "fix the failing test in cart.py"
+```
+
 ---
 
 ## [B] Deliberately not built
@@ -192,6 +226,71 @@ the gap was real, and the moment the help text started documenting `reject` it f
 right now rather than three edits behind.
 
 </details>
+
+---
+
+## [D] Worth building next
+
+Ranked by value per unit of work. None is blocked; none is a defect. Everything here is
+about `tribunal code`, because that is the newest surface and the rest of the system has
+had its rough edges filed off by 68 numbered findings in docs/13.
+
+### D1. Cache the transcript prefix — the biggest cost win available
+
+Today `LLMRequest` has one cacheable region: `system`. That was the right shape for a
+critic, whose volatile half is one round's findings. It is the wrong shape for a coding
+agent, whose volatile half is a transcript that only ever grows — so **every turn pays full
+input price for every earlier step**, and a forty-step session pays for its own history
+forty times. On Anthropic the fix is a second `cache_control` breakpoint at the end of the
+frozen part of the transcript; the request already knows which part is frozen, because
+`_render_transcript` is the only thing that appends to it. Expect the dominant cost of a
+long session to drop by most of itself.
+
+### D2. Resume a session
+
+`--log` already writes every step as JSON. Reading it back into `entries` is most of a
+`tribunal code --continue`, and it turns an interrupted session from a loss into a pause.
+
+### D3. Honour `.gitignore`
+
+`grep`, `glob` and `list` skip a static ignore list (`code.ignore_dirs`). A project's own
+`.gitignore` is the better list and it is already on disk. Today a generated `dist/` that
+is not in the static list costs a context window; worse, a gitignored `secrets.env` is
+greppable when the project has already said it should not be.
+
+### D4. A token budget, not just a dollar one
+
+`code.max_usd` cannot stop a runaway session on NIM, because NIM is `not_token_metered` and
+every call costs exactly $0.00. The step cap is the only real guard there. `BudgetConfig`
+already has `max_tokens` and the client already totals them; the code session should check
+the same way.
+
+### D5. `review --test`
+
+The agent's `review` tool runs the tribunal with static grounding only. The CLI's `run`
+accepts `--test` with `--allow-exec` and gets a pytest oracle out of it, which is what
+turns the Profiler from `unmeasurable` into measured. The tool should be able to pass one.
+
+### D6. Write a real trace, so `tribunal view` works on a session
+
+A coding session emits a JSONL log that only this project's own eyes can read. The trace
+layer already has a writer, a reader, and an offline HTML viewer. A session is not a review
+and should not pretend to be one, but "render what happened as one HTML file" is a solved
+problem here being solved twice.
+
+### D7. Parallel tool calls
+
+One tool call per step is a consequence of the structured-output design (`code/actions.py`
+explains why that design was chosen). Reading four files takes four round trips. A
+`steps: list[Step]` variant for read-only tools only would cut the latency of the survey
+phase without letting two writes race.
+
+### D8. POSIX assumptions
+
+`os.killpg`, `start_new_session` and `readline` are all POSIX. On Windows the timeout path
+in `tools._bash` would raise rather than kill. Either guard them or declare the platform in
+`pyproject.toml`; today it is neither.
+
 
 ## What this file is not
 

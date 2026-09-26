@@ -288,17 +288,24 @@ HOUSEKEEPING
 
 WHAT IS ACTUALLY LEFT  (the unticked boxes above, consolidated -> REMAINING.md)
 -------------------------------------------------------------------------------
-[A] Blocked on environment -- 10 items, all BUILT and tested against a scripted provider,
+[A] Blocked on environment -- 11 items, all BUILT and tested against a scripted provider,
     none ever RUN. A1 verify-docker (daemon, closes S7) - A2 record cassettes (key; the
     cheapest one, turns the red `smoke` gate green) - A3 dev sweep (key, ~$22-28) - A4
     judge kappa (A3 + a human labelling 30 rows BEFORE seeing the judge) - A5 freeze
     thresholds - A6 promote baseline - A7 held-out sweep, ONCE (closes S5) - A8 register the
     MCP server in a host - A9 results table / demo GIF / CI badge - A10 the criteria
-    table.
+    table - A11 run `tribunal code` against a real model (every Step so far was scripted;
+    --log records parse_retries so the answer is a number, not an impression).
     S3 and S6 are DONE. S6 by construction: one report.build, both paths call it.
     S8 needs two people ("Ask two people. Actually do this."). I am not two people, and I
     wrote the README, which disqualifies me twice.
 [B] Deliberately skipped -- AGENTS.md and the VS Code extension. Reasoning in REMAINING.md
+[D] Worth building next -- not blocked, not defects, ranked in REMAINING.md. D1 cache the
+    transcript prefix (a coding session pays full input price for its whole history every
+    turn; the single biggest cost win) - D2 --continue from a session log - D3 honour
+    .gitignore - D4 a token budget (max_usd cannot bound a NIM session: every call is
+    $0.00) - D5 review --test - D6 write a real trace so `view` works on a session - D7
+    parallel read-only steps - D8 the POSIX assumptions in tools._bash.
     §B; both are calls, not blockers, so overrule freely.
 [C] Found and left -- EMPTY. The one entry (cli help) closed above.
 

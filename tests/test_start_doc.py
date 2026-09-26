@@ -107,7 +107,7 @@ def test_every_flag_it_documents_for_run_exists():
     assert not missing, f"start.md documents {missing} on `run`, which does not accept them"
 
 
-@pytest.mark.parametrize("command", ["eval", "replay", "view", "ground"])
+@pytest.mark.parametrize("command", ["eval", "replay", "view", "ground", "code"])
 def test_flags_shown_for_other_commands_exist(command):
     """Flags appear inline for these, so they are pulled out of the code blocks that name
     the command rather than out of a dedicated block."""
@@ -142,7 +142,7 @@ def test_the_exit_code_table_matches_the_cli():
 
 
 def test_the_arm_table_matches_the_eval_harness():
-    documented = set(re.findall(r"^\| `(B\d)` \|", _section("## 8. The benchmark"), re.M))
+    documented = set(re.findall(r"^\| `(B\d)` \|", _section("## 9. The benchmark"), re.M))
     assert documented == set(ARM_IDS)
 
 

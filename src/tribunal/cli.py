@@ -27,6 +27,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
 
 from tribunal import __version__, viewer
 from tribunal.agents import (
@@ -46,6 +47,7 @@ from tribunal.eval import labels, runner
 from tribunal.eval.judge import Judge
 from tribunal.grounding.suite import GroundingSuite
 from tribunal.llm import registry
+from tribunal.llm.base import ProviderName
 from tribunal.llm.cassette import CassetteStore
 from tribunal.llm.client import LLMClient
 from tribunal.orchestrator import Orchestrator
@@ -925,6 +927,153 @@ def _print_run(result: Any) -> None:
         console.print(f"[dim]trace: {result.trace_path}[/]")
 
 
+@app.command()
+def code(
+    prompt: Annotated[
+        list[str] | None,
+        typer.Argument(
+            help="What you want done. Starts an interactive session seeded with it; "
+            "with --print, runs it once and exits."
+        ),
+    ] = None,
+    print_: Annotated[
+        bool,
+        typer.Option("--print", "-p", help="One shot: run the prompt, print the reply, exit."),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            "-y",
+            help="Approve every edit and command without asking. Read what this means in "
+            "code/approval.py before using it outside a container.",
+        ),
+    ] = False,
+    plan: Annotated[
+        bool,
+        typer.Option(
+            "--plan", help="Refuse every edit and command; read, reason and propose only."
+        ),
+    ] = False,
+    cwd: Annotated[
+        Path | None,
+        typer.Option("--cwd", help="Workspace root. Nothing outside it can be read or written."),
+    ] = None,
+    config: Annotated[
+        Path | None, typer.Option("--config", help="TOML config, e.g. examples/nim.toml")
+    ] = None,
+    model: Annotated[str | None, typer.Option("--model", help="Override the model.")] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="Override the provider for a model not in the table."),
+    ] = None,
+    max_steps: Annotated[
+        int | None, typer.Option("--max-steps", help="Tool calls per turn. Default 40.")
+    ] = None,
+    max_usd: Annotated[
+        float | None, typer.Option("--max-usd", help="Spend cap for the session. Default 5.")
+    ] = None,
+    log: Annotated[
+        Path | None,
+        typer.Option("--log", help="Append every step to this file as JSON lines."),
+    ] = None,
+) -> None:
+    """Work in this directory with a coding agent: read, edit, run, and call the tribunal.
+
+    The agent holds one tool per step -- read, list, grep, glob, write, edit, bash, review --
+    and `review` is the one no other coding agent has: it hands a file to the full
+    adversarial loop rather than to a second opinion from the same model.
+
+    Approval, by mode:
+
+      ask (default)   reads run free; edits and commands ask, and `always` is remembered
+      plan            every edit and command is refused; the agent proposes instead
+      auto (--yes)    nothing is asked
+
+    `--print` defaults to plan mode, because a non-interactive run has nobody to ask. Add
+    `--yes` to let it change things.
+    """
+    from tribunal.code.approval import ApprovalMode, Approver
+    from tribunal.code.repl import Repl
+    from tribunal.code.session import CodeSession
+    from tribunal.code.tools import Workspace, WorkspaceError
+
+    if yes and plan:
+        console.print("[red]--yes and --plan ask for opposite things[/]")
+        raise typer.Exit(ExitCode.USAGE)
+
+    request = " ".join(prompt).strip() if prompt else ""
+    if print_ and not request:
+        console.print("[red]--print needs a prompt[/]")
+        raise typer.Exit(ExitCode.USAGE)
+
+    settings = Settings.load(config)
+    agent_config = settings.agents.code
+    if model is not None:
+        agent_config = agent_config.model_copy(update={"model": model})
+    if provider is not None:
+        try:
+            agent_config = agent_config.model_copy(update={"provider": ProviderName(provider)})
+        except ValueError:
+            console.print(f"[red]unknown provider {provider!r}[/]")
+            raise typer.Exit(ExitCode.USAGE) from None
+    updates: dict[str, Any] = {}
+    if max_steps is not None:
+        updates["max_steps"] = max_steps
+    if max_usd is not None:
+        updates["max_usd"] = max_usd
+    settings = settings.model_copy(
+        update={
+            "agents": settings.agents.model_copy(update={"code": agent_config}),
+            "code": settings.code.model_copy(update=updates),
+        }
+    )
+
+    unusable = registry.build(
+        agent_config.resolved_provider(), settings.providers
+    ).available()
+    if unusable:
+        console.print(f"[red]cannot start:[/] {unusable}")
+        console.print("Route with --config examples/nim.toml, or --provider/--model.")
+        raise typer.Exit(ExitCode.USAGE)
+
+    try:
+        workspace = Workspace(cwd or Path.cwd())
+    except WorkspaceError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(ExitCode.USAGE) from None
+
+    mode = ApprovalMode.AUTO if yes else ApprovalMode.PLAN if plan else ApprovalMode.ASK
+    if print_ and not yes:
+        # Nobody is there to answer a prompt, and silently editing a tree because the run
+        # happened to be non-interactive is the behaviour this whole module is careful not
+        # to have. Said out loud rather than discovered from a refusal.
+        mode = ApprovalMode.PLAN
+    session = CodeSession(
+        settings=settings,
+        workspace=workspace,
+        client=LLMClient(settings),
+        approver=Approver(mode=mode),
+        log_path=log,
+    )
+
+    if print_:
+        if mode is ApprovalMode.PLAN:
+            console.print(
+                "[dim]plan mode: nothing will be edited or executed. Add --yes to allow it.[/]"
+            )
+        answer = asyncio.run(session.ask(request))
+        # `Text`, not a markup string: the reply is model-authored, and Rich would read a
+        # `list[int]` in it as a style tag.
+        console.print(Text(answer.message))
+        if answer.stopped_by:
+            console.print(f"[yellow]stopped: {answer.stopped_by}[/]", style="yellow")
+            raise typer.Exit(ExitCode.FAILED)
+        raise typer.Exit(ExitCode.ACCEPT)
+
+    raise typer.Exit(Repl(session, console).run(request or None))
+
+
 @app.command("eval")
 def evaluate(
     split: Annotated[
@@ -1436,5 +1585,39 @@ def _docker_version() -> str | None:
     return out.stdout.strip() or None
 
 
-if __name__ == "__main__":  # pragma: no cover
+def command_names() -> set[str]:
+    """Every subcommand Click will accept, as typed.
+
+    Derived from the built Click group rather than from `app.registered_commands`, because a
+    command's name can come from the decorator, from the function name, or from Typer's
+    underscore-to-dash rewriting, and only the built group knows which applied. `test_cli`
+    asserts this against the real group so a renamed command cannot quietly become a prompt.
+    """
+    import typer.main
+
+    return set(typer.main.get_command(app).commands)
+
+
+def main() -> None:
+    """The `tribunal` entry point: a subcommand, or a bare prompt for the coding agent.
+
+        tribunal doctor                 # a subcommand, unchanged
+        tribunal "why does this fail?"  # rewritten to `tribunal code "..."`
+        tribunal -p "add a test"        # rewritten too; -p belongs to `code`
+
+    A shim rather than a Typer feature, because Click cannot have both a default command and
+    a set of named ones: a group either dispatches on the first argument or it does not. The
+    rewrite is therefore deliberately timid -- it fires only when the first argument is not a
+    known command and not a help flag, so no existing invocation can change meaning, and
+    `tribunal doc` (a typo for `doctor`) still gets Click's "no such command" rather than
+    being sent to a model as a prompt.
+    """
+    argv = sys.argv[1:]
+    first = argv[0] if argv else ""
+    if argv and first not in command_names() and first not in {"--help", "-h", "--version"}:
+        sys.argv = [sys.argv[0], "code", *argv]
     app()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

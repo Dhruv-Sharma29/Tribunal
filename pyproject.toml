@@ -40,7 +40,9 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
 mcp = ["mcp>=2.0"]
 
 [project.scripts]
-tribunal = "tribunal.cli:app"
+# `cli:main`, not `cli:app`: the wrapper lets `tribunal "fix the failing test"` mean
+# `tribunal code "..."` while every named subcommand keeps working. See `cli.main`.
+tribunal = "tribunal.cli:main"
 # A separate entry point, not a `tribunal mcp` subcommand: a host launches this and then
 # owns the process's stdout, so anything else the CLI might print there corrupts the
 # protocol stream.

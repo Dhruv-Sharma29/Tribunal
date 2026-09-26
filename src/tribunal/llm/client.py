@@ -175,6 +175,10 @@ class LLMClient:
             local: list[str] = []
             if self.settings.llm.repair_quantisation_locally:
                 local = _quantise_in_place(data)
+            # Gemini's schema adapter must strip `additionalProperties` (unsupported),
+            # so the model may return extra fields (e.g. `args`). Strip unknown top-level
+            # keys locally rather than burning a repair retry on a trivially fixable issue.
+            local.extend(_strip_extra_keys(data, output_model))
             try:
                 value = output_model.model_validate(data)
                 if post_validate is not None:
@@ -261,6 +265,22 @@ def register_output_model(model: type[BaseModel]) -> type[BaseModel]:
     """Register an additional output model. Agents defined outside `contracts` use this."""
     _MODEL_BY_NAME[model.__name__] = model
     return model
+
+
+def _strip_extra_keys(data: dict[str, Any], model: type[BaseModel]) -> list[str]:
+    """Remove top-level keys that the output model does not define.
+
+    Providers whose schema adapters must drop ``additionalProperties`` (Gemini) cannot
+    guarantee that the model won't invent extra fields.  Stripping them locally is
+    cheaper than a repair retry and mirrors how ``_quantise_in_place`` fixes confidence.
+    """
+    known = set(model.model_fields)
+    extras = [k for k in data if k not in known]
+    notes: list[str] = []
+    for key in extras:
+        del data[key]
+        notes.append(f"stripped extra key {key!r}")
+    return notes
 
 
 def _quantise_in_place(data: dict[str, Any]) -> list[str]:

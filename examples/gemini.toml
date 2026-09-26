@@ -1,0 +1,52 @@
+# Route all Tribunal agents through Google Gemini.
+#
+# Usage:
+#   tribunal code --config examples/gemini.toml
+#   tribunal run examples/sql_injection.py --config examples/gemini.toml
+#
+# Or copy to tribunal.toml for auto-discovery:
+#   cp examples/gemini.toml tribunal.toml
+#
+# Needs GEMINI_API_KEY from https://aistudio.google.com/apikey
+
+[agents.redteam]
+model = "gemini-3.8-flash"
+effort = "high"
+max_tokens = 8000
+
+[agents.profiler]
+model = "gemini-3.8-flash"
+effort = "high"
+max_tokens = 8000
+
+[agents.coder]
+model = "gemini-3.8-flash"
+effort = "high"
+effort_late_round = "xhigh"
+max_tokens = 16000
+
+[agents.code]
+model = "gemini-3.8-flash"
+effort = "medium"
+max_tokens = 8000
+
+[agents.arbiter]
+model = "gemini-3.8-flash"
+effort = "xhigh"
+max_tokens = 8000
+
+[agents.arbiter_affirm]
+model = "gemini-3.8-flash"
+effort = "medium"
+max_tokens = 4000
+
+[agents.postmortem]
+model = "gemini-3.8-flash"
+effort = "medium"
+max_tokens = 8000
+
+[llm]
+mode = "live"
+
+[providers.gemini]
+key_env = "GEMINI_API_KEY"

@@ -166,6 +166,12 @@ PRICES: dict[str, ModelPrice] = {
         provider=ProviderName.NIM, input_per_mtok=0.0, output_per_mtok=0.0,
         context=128_000, billing="not_token_metered", source=_NIM_SOURCE,
     ),
+    # Successor to the 49B model. 120B MoE with ~12B active parameters per token.
+    # The 49B reached EOL on 2026-08-26; this is its replacement on the hosted endpoint.
+    "nvidia/nemotron-3-super-120b-a12b": ModelPrice(
+        provider=ProviderName.NIM, input_per_mtok=0.0, output_per_mtok=0.0,
+        context=128_000, billing="not_token_metered", source=_NIM_SOURCE,
+    ),
 }
 
 #: Model ids that appear in the docs or in the wild but are not the canonical string.
@@ -318,6 +324,65 @@ class SandboxConfig(BaseModel):
 
 
 # --------------------------------------------------------------------------------------------
+# The interactive coding agent
+# --------------------------------------------------------------------------------------------
+
+
+class CodeConfig(BaseModel):
+    """Limits for `tribunal code`, the interactive terminal agent.
+
+    Separate from `SandboxConfig` on purpose, and the distinction is the whole safety story
+    of this surface. The sandbox exists to run *model-written code from an untrusted input
+    file* with a scrubbed environment and no credentials reachable. `tribunal code` is the
+    opposite situation: a developer sitting at their own repository, who wants `pytest` and
+    `git` to work with their own environment and their own `PATH`. Confining that to the
+    sandbox would make the tool useless, so it is not confined -- and the protection is a
+    human approval per command instead, plus the limits below. Nothing here claims
+    isolation; see `approval.py` for what is actually enforced.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    #: Tool calls per user turn before the agent is stopped and asked to summarise. A stop,
+    #: not a crash: the transcript survives and the next prompt continues from it.
+    max_steps: int = Field(default=40, ge=1)
+    #: Spend cap for one *session*, not one turn -- a loop that burns the budget in eight
+    #: cheap turns is the case worth catching.
+    max_usd: float = Field(default=5.00, gt=0)
+    command_timeout_seconds: int = Field(default=120, gt=0)
+    #: Per-observation cap. Bigger than the grounding layer's because a test run's tail is
+    #: often the whole answer, and the model cannot ask for "the rest".
+    max_output_chars: int = Field(default=8_000, gt=0)
+    max_read_lines: int = Field(default=800, gt=0)
+    max_file_bytes: int = Field(default=2 << 20, gt=0)
+    #: Transcript budget. Older steps are elided from the middle when this is exceeded, so a
+    #: long session degrades by forgetting rather than by failing a context-length check.
+    max_history_chars: int = Field(default=60_000, gt=0)
+    max_grep_matches: int = Field(default=80, ge=1)
+    max_glob_results: int = Field(default=200, ge=1)
+    #: Never walked, never grepped, never listed. A `.venv` is the single fastest way to
+    #: spend a context window on nothing.
+    ignore_dirs: tuple[str, ...] = (
+        ".git",
+        ".hg",
+        ".svn",
+        ".venv",
+        "venv",
+        "node_modules",
+        "__pycache__",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".pytest_cache",
+        ".tox",
+        "dist",
+        "build",
+        ".next",
+        "target",
+        "traces",
+    )
+
+
+# --------------------------------------------------------------------------------------------
 # Agents
 # --------------------------------------------------------------------------------------------
 
@@ -362,6 +427,11 @@ class AgentsConfig(BaseModel):
     arbiter_affirm: AgentConfig = AgentConfig(effort="medium", max_tokens=4_000)
     #: Summarisation from a trace, not reasoning.
     postmortem: AgentConfig = AgentConfig(effort="medium")
+    #: `tribunal code`. Not a tribunal member either: it holds the tools and the transcript,
+    #: and it can *call* the tribunal on a file. `max_tokens` is low because one turn emits
+    #: one tool call, and the one field that can be large -- a whole file in `content` -- is
+    #: the case worth making the model think twice about rather than budgeting for.
+    code: AgentConfig = AgentConfig(effort="medium", max_tokens=8_000)
     #: Not a tribunal member: the eval's judge, which never runs during a review. It lives here
     #: because it is an agent with a model and an effort and the machinery is shared.
     #: docs/07 § LLM-as-judge is explicit that this one does not get a cheaper model --
@@ -471,6 +541,7 @@ class Settings(BaseSettings):
     budget: BudgetConfig = BudgetConfig()
     sandbox: SandboxConfig = SandboxConfig()
     agents: AgentsConfig = AgentsConfig()
+    code: CodeConfig = CodeConfig()
     grounding: GroundingConfig = GroundingConfig()
     providers: ProvidersConfig = ProvidersConfig()
     llm: LLMConfig = LLMConfig()

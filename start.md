@@ -265,7 +265,57 @@ Three differences from the CLI, each on purpose:
 
 ---
 
-## 8. The benchmark
+## 8. In a terminal (`tribunal code`)
+
+Sections 1-7 are the pipeline: hand it a file, get a verdict. This one is the other shape --
+a prompt, a transcript, and an agent that reads, edits and runs things in the directory you
+are standing in.
+
+```bash
+tribunal code                                   # interactive, in the current directory
+tribunal "why does test_fetch fail?"            # the same thing, seeded with a prompt
+tribunal code --print "add a test for parse_row"    # one shot, then exit
+tribunal code --yes --max-steps 60              # approve nothing by hand, longer leash
+```
+
+The bare form is a shim, not a second CLI: `tribunal <anything that is not a subcommand>` is
+rewritten to `tribunal code <anything>`, so `tribunal doctor` still means `doctor` and a typo
+still gets "no such command" rather than being sent to a model.
+
+**Eight tools, one per step.** `read`, `list`, `grep`, `glob`, `write`, `edit`, `bash` --
+and `review`, which is the one that is only possible here: it hands a Python file to the
+whole tribunal from § 3, two independent critics and the decision table, rather than to a
+second opinion from the same model that just wrote the code. Its patch is reported, never
+applied. A `tradeoff` has no sensible automatic action, which is rather the point of it.
+
+**Who gets asked what:**
+
+| mode | reads | edits and commands |
+|---|---|---|
+| `ask` (default) | run free | each one asks; `always` is remembered per program |
+| `plan` (`--plan`) | run free | refused; the agent proposes the change instead |
+| `auto` (`--yes`) | run free | run without asking |
+
+`--print` defaults to **plan mode**, because a non-interactive run has nobody to answer a
+prompt, and quietly editing a tree because the session happened to be non-interactive is not
+a default worth having. Add `--yes` to let it change things.
+
+Inside a session: `/help`, `/cost`, `/mode`, `/diff` (the net change so far), `/undo`
+(revert the last write or edit, with no git checkout required), `/review <file.py>`,
+`/clear`, `/exit`.
+
+**What it does not do, stated plainly.** One tool call per step, not several in parallel, and
+no streaming -- both follow from building on the structured-output layer in `llm/` rather
+than a second, message-threaded one, which is what lets this work on all four providers
+including a self-hosted NIM. And `bash` is **not sandboxed**: § 6's sandbox scrubs the
+environment down to four variables, which is right for executing a model's patch of an
+untrusted file and useless for a developer who wants `pytest` and `git` to work. The
+protections here are the workspace root check, which is structural, and you reading the
+command before typing `y`. `--yes` gives that up; run it in a container.
+
+---
+
+## 9. The benchmark
 
 24 hand-written cases in `eval/cases/`, each with a planted defect, a test, and a `meta.yaml`
 declaring what a correct review must find.
@@ -298,7 +348,7 @@ times and report the best one, the split has stopped meaning anything.
 
 ---
 
-## 9. Where to read next
+## 10. Where to read next
 
 | | |
 |---|---|

@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tribunal eval · 2026-09-26T10:15:42Z</title>
+<style>
+/* tribunal trace viewer. No CDN, no webfont: the file must render from file:// with the
+   network unplugged, because that is how a reviewer opens it and how the demo GIF is made. */
+
+:root {
+  --bg: #fbfbfa;
+  --panel: #ffffff;
+  --ink: #1a1a19;
+  --muted: #6b6b66;
+  --line: #e2e2dd;
+  --accent: #2f5fd0;
+  --high: #c0392b;
+  --medium: #c77700;
+  --low: #7a7a72;
+  --ok: #2d7a45;
+  --security: #b8433a;
+  --performance: #2f6f8f;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16171a;
+    --panel: #1d1f23;
+    --ink: #e8e8e4;
+    --muted: #9a9a94;
+    --line: #32343a;
+    --accent: #7aa2f7;
+    --high: #f07178;
+    --medium: #e0a33e;
+    --low: #8b8b84;
+    --ok: #7bc47f;
+    --security: #f07178;
+    --performance: #6fb3d2;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px 64px; }
+
+/* -- header ------------------------------------------------------------------------------ */
+
+header {
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  padding: 16px 0 0;
+  margin-bottom: 20px;
+}
+
+.runline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.runid { font-family: var(--mono); color: var(--muted); font-size: 12px; }
+.runfile { font-weight: 600; font-size: 16px; }
+.runstat { color: var(--muted); font-size: 13px; }
+
+.outcome {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 13px;
+}
+.outcome.accept { background: var(--ok); }
+.outcome.tradeoff { background: var(--medium); }
+.outcome.escalate, .outcome.reject { background: var(--high); }
+
+.spark { display: block; }
+.sparkwrap { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+
+/* -- tabs -------------------------------------------------------------------------------- */
+
+.tabs { display: flex; gap: 2px; margin-top: 14px; }
+
+.tabs button {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  padding: 7px 14px;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+}
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--bg);
+  border-color: var(--line);
+  font-weight: 600;
+}
+
+/* -- generic panels ---------------------------------------------------------------------- */
+
+.round { margin: 0 0 34px; }
+
+.roundhead {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 5px;
+  margin-bottom: 14px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.card h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.card .meta { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+
+/* -- the two critics, side by side ------------------------------------------------------- */
+
+/* Requirement 1 of docs/06 § The viewer, and the single most important rule in this file:
+   the critics are independent, and a vertical list would read as a pipeline. */
+.critics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+@media (max-width: 760px) {
+  .critics { grid-template-columns: 1fr; }
+}
+
+.critic { margin-bottom: 0; border-top: 3px solid var(--line); }
+.critic.security { border-top-color: var(--security); }
+.critic.performance { border-top-color: var(--performance); }
+.critic.errored { border-top-color: var(--high); opacity: 0.85; }
+
+.verdict { font-weight: 700; letter-spacing: 0.04em; font-size: 13px; }
+.verdict.block { color: var(--high); }
+.verdict.concerns { color: var(--medium); }
+.verdict.clean { color: var(--ok); }
+
+/* -- issues ------------------------------------------------------------------------------ */
+
+.issue { border-top: 1px solid var(--line); padding: 8px 0 2px; }
+.issue:first-of-type { border-top: none; }
+
+.issue summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.issue summary::-webkit-details-marker { display: none; }
+.issue summary::before { content: "▸"; color: var(--muted); font-size: 11px; }
+.issue[open] > summary::before { content: "▾"; }
+
+.sev {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 2px;
+  color: #fff;
+}
+.sev.high { background: var(--high); }
+.sev.medium { background: var(--medium); }
+.sev.low, .sev.info { background: var(--low); }
+
+.issueid { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.issuetitle { flex: 1; min-width: 180px; }
+
+.issuebody { padding: 8px 0 8px 16px; font-size: 13px; }
+.issuebody p { margin: 0 0 8px; }
+
+/* Requirement 3: evidence is one click away. That is the difference between "the agent said
+   so" and "the agent cited bandit:B602 at line 41, here it is". */
+.evidence {
+  border-left: 2px solid var(--line);
+  padding: 4px 0 4px 10px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+.evidence .ref { font-family: var(--mono); color: var(--accent); }
+.evidence .kind { color: var(--muted); }
+.evidence pre {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.ungrounded { color: var(--medium); font-size: 12px; }
+
+/* -- the policy decision ----------------------------------------------------------------- */
+
+/* Requirement 2: the thing a viewer should notice within two seconds. */
+.policy {
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--panel);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+}
+
+.policy .decision { font-size: 19px; font-weight: 800; letter-spacing: 0.04em; }
+.policy.accept { border-color: var(--ok); }
+.policy.accept .decision { color: var(--ok); }
+.policy.reject { border-color: var(--high); }
+.policy.reject .decision { color: var(--high); }
+.policy.tradeoff { border-color: var(--medium); }
+.policy.tradeoff .decision { color: var(--medium); }
+.policy.escalate { border-color: var(--high); }
+.policy.escalate .decision { color: var(--high); }
+
+.rule {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+
+.policy .num { color: var(--muted); font-size: 13px; font-family: var(--mono); }
+
+/* -- tables ------------------------------------------------------------------------------ */
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+td.num, th.num { text-align: right; font-family: var(--mono); }
+tbody tr:last-child td { border-bottom: none; }
+tfoot td { font-weight: 700; border-top: 2px solid var(--line); }
+
+.scroll { overflow-x: auto; }
+
+/* -- diffs ------------------------------------------------------------------------------- */
+
+pre.diff {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+}
+pre.diff .add { color: var(--ok); }
+pre.diff .del { color: var(--high); }
+pre.diff .hunk { color: var(--accent); font-weight: 600; }
+
+/* Requirement 5: the previous round beside this one, so oscillation is visible. */
+.diffpair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .diffpair { grid-template-columns: 1fr; } }
+.diffpair h4 { margin: 0 0 6px; font-size: 11px; color: var(--muted); letter-spacing: 0.06em; }
+
+/* -- timeline ---------------------------------------------------------------------------- */
+
+.bar { display: grid; grid-template-columns: 130px 1fr 74px; gap: 10px; align-items: center; }
+.bar + .bar { margin-top: 3px; }
+.bar .label { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.bar .track { background: var(--bg); border: 1px solid var(--line); border-radius: 3px; height: 16px; }
+.bar .fill { height: 100%; background: var(--accent); opacity: 0.55; border-radius: 2px; }
+.bar.agent .fill { background: var(--medium); }
+.bar .ms { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; }
+.bar.indent .label { padding-left: 14px; }
+
+.parallel {
+  color: var(--accent);
+  font-size: 12px;
+  margin: 6px 0 0 140px;
+}
+
+/* -- narrative --------------------------------------------------------------------------- */
+
+.narrative h2 { font-size: 15px; margin: 18px 0 6px; }
+.narrative h2:first-child { margin-top: 0; }
+.narrative ul { margin: 6px 0; padding-left: 20px; }
+.narrative p { margin: 0 0 8px; }
+.narrative strong { font-weight: 700; }
+
+.note { color: var(--muted); font-size: 13px; }
+.warn {
+  border-left: 3px solid var(--medium);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: var(--panel);
+  font-size: 13px;
+}
+.err { border-left-color: var(--high); }
+
+/* Results report. Inlined next to the viewer's palette, which it reuses. */
+
+.wrap { max-width: 1180px; }
+
+.meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.meta b { color: var(--ink); font-weight: 600; }
+
+.banner {
+  border-left: 3px solid var(--medium);
+  background: var(--panel);
+  padding: 10px 14px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.banner.bad { border-left-color: var(--high); }
+.banner.good { border-left-color: var(--ok); }
+.banner b { display: block; margin-bottom: 2px; }
+
+h1 { font-size: 20px; margin: 20px 0 4px; }
+h2 { font-size: 15px; margin: 30px 0 10px; letter-spacing: 0.02em; }
+
+table.results td.metric { font-weight: 600; }
+table.results td.sub { padding-left: 26px; color: var(--muted); font-weight: 400; }
+table.results td.lead { background: var(--panel); }
+table.results th.arm { text-align: right; font-family: var(--mono); }
+
+.count { font-family: var(--mono); }
+.na { color: var(--muted); }
+
+/* Per-case matrix: the thing a markdown summary cannot show. */
+table.matrix td.case { font-family: var(--mono); font-size: 12px; }
+table.matrix td.cell { text-align: center; font-family: var(--mono); font-size: 12px; }
+.pill {
+  display: inline-block;
+  min-width: 34px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+.pill.all { background: var(--ok); color: #fff; border-color: transparent; }
+.pill.some { background: var(--medium); color: #fff; border-color: transparent; }
+.pill.none { background: var(--high); color: #fff; border-color: transparent; }
+.pill.na { color: var(--muted); }
+.fix { font-size: 11px; margin-left: 4px; }
+.fix.yes { color: var(--ok); }
+.fix.no { color: var(--high); }
+
+.cat { font-size: 11px; color: var(--muted); }
+.how { font-size: 11px; }
+.how.rule, .how.line_range { color: var(--ok); }
+.how.judge { color: var(--medium); }
+.how.none { color: var(--high); }
+
+details.case { border-top: 1px solid var(--line); padding: 8px 0; }
+details.case summary { cursor: pointer; font-family: var(--mono); font-size: 13px; }
+details.case .body { padding: 8px 0 4px 18px; font-size: 13px; }
+
+.caveats { margin-top: 34px; border-top: 2px solid var(--line); padding-top: 14px; }
+.caveats p { color: var(--muted); font-size: 13px; max-width: 78ch; }
+
+</style>
+</head>
+<body>
+<main class="wrap">
+<h1>tribunal eval — 2026-09-26T10:15:42Z</h1>
+<div class="meta"><b>models</b> arbiter=claude-opus-5 · coder=claude-opus-5 · postmortem=claude-opus-5 · profiler=claude-opus-5 · redteam=claude-opus-5<br><b>prompts</b> arbiter@v1 arbiter_affirm@v1 code@v1 coder@v4 judge@v1 postmortem@v1 profiler@v1 redteam@v1<br><b>severity weights</b> info0 low1 medium4 high16<br><b>prices</b> 2026-09-16 · <b>schema</b> 1.0 · <b>tribunal</b> 0.1.0<br><b>splits</b> dev · <b>cases</b> 8 · <b>arms</b> B0, B1, B2, B3</div>
+<div class="banner good"><b>No judge was involved.</b>M1 counts mechanical locator matches only, and M2 is absent. Every number below is reproducible from the traces with no model in the loop.</div>
+<div class="banner"><b>Partial benchmark: 0 of 24 cases.</b>These numbers describe the cases that ran, not the benchmark. They are not comparable with a full sweep.</div>
+<h2>Results</h2>
+<div class="scroll"><table class="results">
+<thead><tr><th>Metric</th></tr></thead><tbody>
+<tr class="lead"><td class="metric lead">M4 patch applies, parses, passes</td></tr>
+<tr class=""><td class="metric">M1 known-issue recall</td></tr>
+<tr class=""><td class="sub">of which mechanical</td></tr>
+<tr class=""><td class="metric">M2 regressions introduced</td></tr>
+<tr class=""><td class="metric">M3 false positives (canary)</td></tr>
+<tr class=""><td class="metric">M5 outcome accuracy</td></tr>
+<tr class=""><td class="metric">M6 rounds, p50</td></tr>
+<tr class=""><td class="metric">M7 cost p50 / run</td></tr>
+<tr class=""><td class="metric">M7 cost p95 / run</td></tr>
+<tr class=""><td class="metric">M8 re-rated / comparable</td></tr>
+</tbody></table></div>
+<p class="meta">no runs</p>
+<h2>Per case</h2>
+<div class="scroll"><table class="matrix">
+<thead><tr><th>Case</th><th>Category</th></tr></thead><tbody>
+</tbody></table></div>
+<h2>How each issue was matched</h2>
+<div class="banner bad"><b>32 run(s) errored and are excluded from every number above.</b><ul><li><code>B0</code> on <code>001-shell-injection-report</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B1</code> on <code>001-shell-injection-report</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B2</code> on <code>001-shell-injection-report</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B3</code> on <code>001-shell-injection-report</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B0</code> on <code>002-quadratic-membership</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B1</code> on <code>002-quadratic-membership</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B2</code> on <code>002-quadratic-membership</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B3</code> on <code>002-quadratic-membership</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B0</code> on <code>003-validated-query-in-hot-loop</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B1</code> on <code>003-validated-query-in-hot-loop</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B2</code> on <code>003-validated-query-in-hot-loop</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B3</code> on <code>003-validated-query-in-hot-loop</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B0</code> on <code>004-normalise-names</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B1</code> on <code>004-normalise-names</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B2</code> on <code>004-normalise-names</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B3</code> on <code>004-normalise-names</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B0</code> on <code>005-eval-trusted-config</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B1</code> on <code>005-eval-trusted-config</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B2</code> on <code>005-eval-trusted-config</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B3</code> on <code>005-eval-trusted-config</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B0</code> on <code>006-rotated-api-key</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B1</code> on <code>006-rotated-api-key</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B2</code> on <code>006-rotated-api-key</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B3</code> on <code>006-rotated-api-key</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B0</code> on <code>007-internal-pickle-cache</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B1</code> on <code>007-internal-pickle-cache</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B2</code> on <code>007-internal-pickle-cache</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B3</code> on <code>007-internal-pickle-cache</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B0</code> on <code>012-archive-extract-path</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B1</code> on <code>012-archive-extract-path</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B2</code> on <code>012-archive-extract-path</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li><li><code>B3</code> on <code>012-archive-extract-path</code>: ProviderUnavailable: anthropic: ANTHROPIC_API_KEY is not set</li></ul></div>
+<div class="caveats"><h2>Caveats</h2><p><b>Contamination.</b> The cases are hand-written in well-known vulnerability classes, and the models have very likely seen similar code. That is fine for comparing systems on identical inputs, which is what this measures, and not fine for claiming absolute capability.</p><p><b>M1 is two metrics wearing one name.</b> Of the declared defects, almost every one with a mechanical <code>rule</code> locator is a security issue: <code>bandit</code> is a security linter and <code>ruff</code>&#39;s performance rules are narrow. Performance recall therefore rests on line ranges and, where those fail, on the judge. The two dimensions are not equally well evidenced.</p><p><b>Counts, not rates.</b> Every figure above is a count over a small n. A one-case difference is several points and is not a result.</p></div>
+</main>
+</body>
+</html>

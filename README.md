@@ -25,14 +25,14 @@ so `TRADEOFF` can be reached from a single round and the Coder's pushback gets a
 The **Postmortem** writes the run up from the trace and cannot quietly drop an open issue
 while doing it. `tribunal view` renders any trace as a **single offline HTML file**, the
 tribunal ships as a **pair of container images** that keep the credential and the code execution
-apart, and an **MCP server** makes the real tribunal callable from an editor.
+apart, and an **MCP server** makes the real tribunal callable from an editor. **`tribunal code`** puts the whole thing behind an interactive terminal agent that reads, edits and runs commands — and has the tribunal itself as one of its tools.
 
 The **evaluation harness** is built: 24 hand-written cases, four arms, a scored sweep, an
 LLM judge with a κ-validation worksheet, and CI that gates on all of it. What it does not
 have is *numbers* — every remaining step needs an API key or a Docker daemon, and those are
 listed in [`RUNBOOK.md`](RUNBOOK.md) rather than estimated here.
 
-**1,600+ tests, zero API calls by default.** New here? **[`start.md`](start.md)** is the
+**1,800+ tests, zero API calls by default.** New here? **[`start.md`](start.md)** is the
 guided tour: install, first run, and what the system is doing while it runs. Full plan in
 [`docs/`](docs/README.md); every place the build disagreed with the plan is in
 [`docs/13-implementation-notes.md`](docs/13-implementation-notes.md); everything *not* done,
@@ -40,6 +40,8 @@ and whether that was a constraint or a choice, is in
 [`REMAINING.md`](REMAINING.md).
 
 ```console
+$ tribunal code                            # the interactive coding agent, in this directory
+$ tribunal "why does test_fetch fail?"     # same thing, seeded with a prompt
 $ tribunal doctor                          # what the grounding layer can actually do here
 $ tribunal providers --prices              # what each LLM backend can guarantee, and its cost
 $ tribunal ground examples/sql_injection.py --test examples/test_fetch.py --allow-exec
@@ -50,6 +52,50 @@ $ tribunal replay traces/01JB….jsonl                                  # no key
 $ tribunal view traces/01JB….jsonl                                    # one HTML file
 $ tribunal-mcp                                                        # stdio MCP server
 ```
+
+## In a terminal
+
+Everything above this line is a pipeline: hand it a file, get a verdict. `tribunal code` is
+the other shape — a prompt, a transcript, and an agent that reads, edits, greps and runs
+commands in the directory you are standing in until the work is done.
+
+```console
+$ tribunal code                                  # interactive
+$ tribunal "the auth test started failing"       # not a subcommand, so: a prompt
+$ tribunal code --print "add a test for parse_row"
+```
+
+Eight tools, one per step — `read`, `list`, `grep`, `glob`, `write`, `edit`, `bash`, and
+**`review`**, which is the one that only exists here. `review` hands a file to the *whole
+tribunal*: two independent critics, grounded in bandit/ruff/radon/astgate output, and the
+twelve-row decision table. Not a second opinion from the same model that just wrote the
+code — an adversarial one, with a procedure that is allowed to say the critics want
+incompatible things. Its patch is reported, never applied, because `TRADEOFF` has no
+sensible automatic action.
+
+Reads run unprompted; edits and commands ask, and `always` is remembered per *program*, so
+approving `pytest` once does not approve `curl` later. `--plan` refuses every mutation and
+makes the agent propose instead; `--yes` asks nothing. `--print` defaults to plan mode,
+because a non-interactive run has nobody to answer the question.
+
+**What has and has not been run.** The tool loop, the workspace boundary, approval and the
+whole NIM wire path are exercised end to end — against a local endpoint speaking the real
+OpenAI protocol, which covers the SDK, `reasoning_effort`, the `json_schema` response format,
+the `<think>` recovery and the 503 retry. What has *not* happened is a real model choosing
+the steps: no live provider has ever emitted a `Step`. Whether a given model reliably fills
+a flat one-tool-per-turn schema is an open question, and the session log records
+`parse_retries` per step so that it is answerable the first time someone runs it rather than
+a matter of impression. See [`REMAINING.md`](REMAINING.md) § A11.
+
+**Three things it deliberately does not do.** One tool call per step rather than several in
+parallel, and no streaming: both follow from building on the existing structured-output
+layer instead of a second message-threaded one, which is what makes this work identically on
+Anthropic, OpenAI, Gemini and a self-hosted NIM, with cassettes and cost accounting already
+in place. And `bash` is **not sandboxed** — the sandbox scrubs the environment down to four
+variables, which is correct for executing a model's patch of an untrusted file and useless
+for a developer who wants their own `pytest` to work. The real boundaries are the workspace
+root check, which is structural and cannot be approved away, and a human reading the command.
+`--yes` gives the second one up.
 
 ## The two critics
 
@@ -522,7 +568,15 @@ Start at [`docs/README.md`](docs/README.md) for the reading order. Highlights:
 
 ## Scope (v1)
 
-Single-file Python, standard library plus an allowlist, optional `pytest` oracle. Two critic
-dimensions: security and performance. Multi-file refactors, other languages, and networked code are
-explicit non-goals — see the [charter](docs/00-charter.md) for why the narrowing follows from the
-grounding constraint rather than from the timeline.
+**The tribunal** — `run`, `critique`, `propose`, `review`, the MCP server — is single-file
+Python, standard library plus an allowlist, optional `pytest` oracle. Two critic dimensions:
+security and performance. Multi-file refactors, other languages, and networked code are
+explicit non-goals — see the [charter](docs/00-charter.md) for why the narrowing follows from
+the grounding constraint rather than from the timeline.
+
+**`tribunal code`** is not bound by that, and the difference is not an inconsistency. The
+narrowing exists because every critic claim has to be grounded in a real tool result, and
+bandit, ruff, radon and astgate are Python tools. The coding agent makes no grounded claims
+— it reads, edits and runs what you tell it to, in whatever language the directory happens
+to contain. The one place the two meet is its `review` tool, which inherits the narrow scope
+exactly: it refuses anything that is not a `.py` file rather than pretending to assess it.
