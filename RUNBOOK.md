@@ -11,8 +11,8 @@ Steps 1–7 map one-to-one onto [`REMAINING.md`](REMAINING.md) § A1–A7, which
 one is *for* and what it costs to skip. This file is the commands; that file is the
 reasoning. Step 8 is independent of the rest and can be done at any point.
 
-**Do step 2 first if you only have time for one.** It needs no sweep, costs the least, and
-turns a deliberately-red CI gate green.
+**Do step 2 first if you only have time for one.** It supplies the missing full-evaluation
+recordings. PR CI already runs scripted integration and the committed agent recordings.
 
 ---
 
@@ -37,7 +37,7 @@ Then tick the `[~]` box in `docs/09-roadmap.md` Phase 4.
 
 ---
 
-## 2. Record the cassettes — unblocks the `smoke` CI job
+## 2. Record the cassettes — enables full evaluation replay
 
 ```bash
 NVIDIA_API_KEY=... pytest -m live            # the agents' own live tests
@@ -49,7 +49,9 @@ git add tests/cassettes && git commit
 Four prompts have live tests and no recordings: `arbiter/v1`, `arbiter_affirm/v1`,
 `postmortem/v1`, `judge/v1`. The eval's own requests have none either, which is why
 `tribunal eval --smoke` fails today — deliberately, with the recording command in its
-error message. A gate that passes when it cannot do its job is worse than one that is red.
+error message. PR CI runs the scripted evaluation integration and the committed agent replay
+tests instead. Missing full-evaluation recordings still fail `eval --smoke`; they are never
+replaced by fabricated responses or a live-network fallback.
 
 This is the one place the roadmap's own advice ("record cassettes as you build each agent,
 not in a batch at the end") was not followed, and the cost is exactly what it predicted.

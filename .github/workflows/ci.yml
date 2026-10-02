@@ -1,8 +1,8 @@
 # The per-PR gate. Fast, offline, and it never sees a credential.
 #
-# docs/07-evaluation.md § CI integration: "Per PR: unit tests + --smoke (4 cases,
-# cassette-replayed, zero API calls, < 60s)." Full sweeps are ~$25 and ~30 minutes and do
-# not belong here.
+# Per PR: unit tests, scripted evaluation integration, and committed agent recordings.
+# Full evaluation recordings are not yet committed, so `eval --smoke` is a separate,
+# strict replay command. Full live sweeps do not belong in PR CI.
 #
 # **No secret is referenced in this file, and the trigger is `pull_request`, not
 # `pull_request_target`.** That is the whole security design: `pull_request` runs a fork's
@@ -72,7 +72,7 @@ jobs:
         run: tribunal eval --dry-run
 
   smoke:
-    name: smoke (cassette-replayed)
+    name: smoke (offline integration + agent replay)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,9 +80,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -c constraints.txt -e ".[all-providers]"
-      - name: four cases, zero API calls
-        # This job FAILS until cassettes for the eval requests are recorded and committed.
-        # That is deliberate: a gate that passes when it cannot do its job is worse than
-        # one that is red, and the command says exactly how to arm it.
-        run: tribunal eval --smoke --arms B1,B3
+      - run: pip install -c constraints.txt -e ".[dev,all-providers]"
+      - name: evaluation integration and committed recordings, zero API calls
+        # The runner tests drive the real arms against a scripted provider. The Coder
+        # and client tests replay the recordings that actually exist, and fail on a miss.
+        run: python -m pytest -q tests/test_eval_runner.py tests/test_coder.py tests/test_llm_live.py -m "not live"

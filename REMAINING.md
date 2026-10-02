@@ -44,9 +44,10 @@ syntax is checked and its two grep assertions were validated against real `tribu
 output including a negative control; everything else is unexercised. I would not be surprised
 by a first-run failure and neither should you be.
 
-### A2. Record the cassettes — unblocks the `smoke` CI gate
+### A2. Record the cassettes — enables full evaluation replay
 
-**Needs:** an API key. **Unblocks:** `tribunal eval --smoke`, which is the per-PR CI gate.
+**Needs:** an API key. **Unblocks:** `tribunal eval --smoke`. PR CI already runs scripted
+evaluation integration and replay of the committed agent recordings.
 
 Four prompts have live tests and no recordings — `arbiter/v1`, `arbiter_affirm/v1`,
 `postmortem/v1`, `judge/v1` — and the eval's own requests have none either. So `--smoke`
@@ -55,8 +56,8 @@ passes when it cannot do its job is worse than one that is red.
 
 This is the one place the roadmap's own advice was not followed: *"record cassettes as you
 build each agent, not in a batch at the end."* The cost is exactly what it predicted. If you
-do one thing from this file, do this one — it is the cheapest and it turns a red CI gate
-green.
+do one thing from this file, do this one — it fills the largest gap in recorded evaluation
+coverage.
 
 > The committed cassettes were recorded on `nemotron-3-nano-omni-30b-a3b-reasoning` and the
 > default is now `llama-3.3-nemotron-super-49b-v1.5`. `tests/test_coder.py` pins the old

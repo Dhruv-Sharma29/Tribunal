@@ -430,7 +430,7 @@ def test_eval_rejects_a_split_with_no_cases(tmp_path):
 
 
 def test_smoke_selects_a_fixed_slice_and_forbids_api_calls(tmp_path):
-    """`--smoke` is the CI gate: 4 cases, cassette-replayed, zero API calls. Replay mode is
+    """`--smoke` replays 4 cases with zero API calls. Replay mode is
     set by the command rather than by the environment, so a cassette miss raises instead of
     quietly costing money on someone's laptop."""
     outcome = CliRunner().invoke(
@@ -438,6 +438,28 @@ def test_smoke_selects_a_fixed_slice_and_forbids_api_calls(tmp_path):
     )
     assert outcome.exit_code == 0, outcome.output
     assert outcome.output.count("dev") <= 4
+
+
+def test_smoke_with_missing_recordings_fails_without_calling_a_provider(tmp_path, monkeypatch):
+    from tribunal.llm.registry import build_all
+
+    settings = Settings(llm=LLMConfig(mode="live", cassette_dir=tmp_path / "cassettes"))
+    monkeypatch.setattr(Settings, "load", lambda *args, **kwargs: settings)
+    calls = []
+
+    async def forbid_network(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError("a replay must never call a live provider")
+
+    for provider in build_all(settings.providers).values():
+        monkeypatch.setattr(type(provider), "complete", forbid_network)
+    outcome = CliRunner().invoke(app, ["eval", "--smoke", "--arms", "B1,B3"])
+
+    assert outcome.exit_code == 3, outcome.output
+    assert "this gate is unarmed" in outcome.output
+    assert "CassetteMiss" in outcome.output
+    assert calls == []
+    assert not (tmp_path / "cassettes").exists()
 
 
 def test_the_arm_ids_match_the_documented_baselines():

@@ -12,6 +12,14 @@ FIXTURES = Path(__file__).parent / "fixtures"
 GOLDEN = Path(__file__).parent / "golden"
 
 
+@pytest.fixture(autouse=True)
+def stable_cli_output_width(monkeypatch):
+    """Keep diagnostic assertions independent of terminal size and temporary-path length."""
+    from tribunal.cli import console
+
+    monkeypatch.setattr(console, "width", 240)
+
+
 @pytest.fixture
 def exec_sandbox() -> Sandbox:
     """A sandbox with execution enabled and short limits, so tests fail fast."""

@@ -495,8 +495,9 @@ linter wrapper?" than the re-rating rate — but I would have designed the metri
 rather than discovering it while writing case 20 of 24.
 
 **Record cassettes as each agent is built.** The roadmap says this explicitly and I did it for
-the first three agents and not the last three. The consequence is that the per-PR smoke gate
-fails today, on purpose, because it cannot run.
+the first three agents and not the last three. Full evaluation replay still needs those
+recordings; PR CI exercises scripted evaluation integration and the committed agent
+recordings in the meantime.
 
 **Be more suspicious of skips than of failures.** Changing the default NIM model silently
 turned the Coder's entire acceptance criterion into six skipped tests. The run still said

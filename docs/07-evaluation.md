@@ -170,7 +170,7 @@ Use the judge only where it's unavoidable.
 tribunal eval --split dev                     # 8 cases, all four arms
 tribunal eval --split heldout --arms B1,B3    # the headline run
 tribunal eval --replay runs/2026-09-20/       # re-score from traces, zero API calls
-tribunal eval --smoke                         # 4 cases, CI, cassette-replayed
+tribunal eval --smoke                         # 4 cases, requires full eval recordings
 ```
 
 Requirements:
@@ -219,7 +219,9 @@ engineering judgement than the score does.
 
 Full sweeps are ~$25 and ~30 minutes ([10](10-cost-and-limits.md)) — do not run them per-commit.
 
-- **Per PR:** unit tests + `--smoke` (4 cases, cassette-replayed, zero API calls, < 60s).
+- **Per PR:** unit tests plus offline smoke: scripted evaluation integration and replay of
+  committed agent recordings, with zero API calls. Full evaluation recordings are still
+  pending; `eval --smoke` remains a strict replay command and fails on missing recordings.
 - **Nightly on `main`:** dev split, live, publishes the summary in the Actions run; fails on
   regression beyond a threshold in M4.
 - **Per milestone, manual:** held-out sweep. Commit the results directory.

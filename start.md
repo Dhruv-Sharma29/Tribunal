@@ -272,7 +272,7 @@ declaring what a correct review must find.
 
 ```bash
 tribunal eval --dry-run     # validate all 24 against the live grounding. No API calls.
-tribunal eval --smoke       # 4 cases from cassettes. Also no API calls. This is the CI gate.
+tribunal eval --smoke       # 4 cases from full eval recordings, when available. No API calls.
 tribunal eval --split dev --arms B1,B3 --config examples/nim.toml   # costs money
 ```
 

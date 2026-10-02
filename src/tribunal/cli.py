@@ -938,7 +938,7 @@ def evaluate(
         bool,
         typer.Option(
             "--smoke",
-            help="4 cases from cassettes, zero API calls. The CI gate.",
+            help="4 cases from evaluation cassettes, zero API calls. Requires recordings.",
         ),
     ] = False,
     cases_dir: Annotated[
@@ -980,7 +980,8 @@ def evaluate(
     evidence. Every run writes a trace, so a later `--replay` can re-score without paying
     for the debate again.
 
-    `--smoke` is the CI gate and makes no API calls.
+    `--smoke` replays four evaluation cases and makes no API calls. It requires recordings
+    of the full evaluation requests; the committed agent recordings alone are not enough.
 
     `--replay DIR` re-scores a recorded sweep from its traces. Without `--judge` that is
     free and offline; with it, only the judge runs, which is what makes iterating on the
