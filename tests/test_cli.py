@@ -272,7 +272,8 @@ def test_run_says_an_unassessed_dimension_is_not_the_same_as_clean(tmp_path, mon
 
     assert result.exit_code == ExitCode.ESCALATE
     assert "unassessed: performance" in result.output
-    assert "not the same as clean" in result.output
+    # Rich wraps this sentence according to the runner's terminal width.
+    assert "not the same as clean" in " ".join(result.output.split())
     assert "no patch accepted" in result.output
 
 

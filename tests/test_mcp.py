@@ -222,13 +222,16 @@ async def test_allow_exec_reaches_the_sandbox(tmp_path):
     assert _settings_for(settings_for(tmp_path), 2, False).sandbox.allow_exec is False
 
 
-async def test_an_unusable_provider_is_one_sentence_not_a_traceback(tmp_path):
+async def test_an_unusable_provider_is_one_sentence_not_a_traceback(tmp_path, monkeypatch):
     """Over stdio a raised exception is a tool error whose text the host may not show. The
     most likely single failure — the key is set in the user's shell but not in the
     environment the host launched the server from — must say exactly that."""
     from tribunal.mcp_server import build_server
 
     settings = settings_for(tmp_path, trace_dir=tmp_path / "traces")
+    # A developer's real credential must not turn this offline failure test into an API call.
+    for provider in settings.providers.model_dump().values():
+        monkeypatch.delenv(provider["key_env"], raising=False)
     client = LLMClient(settings)
     body = text_of(
         await call(

@@ -50,7 +50,8 @@ jobs:
         run: ruff check src tests
       - name: pytest
         # `-m "not live"` is the default in pyproject, so this makes zero API calls.
-        run: pytest -q
+        # Module invocation puts the repository root on sys.path for tests.* helpers.
+        run: python -m pytest -q
       - name: exit-code contract
         run: ./scripts/check-exit-codes.sh
 

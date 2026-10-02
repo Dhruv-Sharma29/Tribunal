@@ -1,7 +1,7 @@
-# The nightly dev-split run. This is the only workflow that holds a credential.
+# The nightly dev-split run. Live workflows hold credentials; PR CI never does.
 #
 # docs/07-evaluation.md § CI integration: "Nightly on `main`: dev split, live, posts the
-# summary as a commit comment; fails on regression beyond a threshold in M4."
+# summary in the Actions run; fails on regression beyond a threshold in M4."
 #
 # A `schedule` trigger only ever runs from the default branch of this repository, so a fork
 # cannot cause it to run and cannot reach `secrets`. `workflow_dispatch` is restricted to
@@ -19,8 +19,6 @@ on:
 
 permissions:
   contents: read
-  # Needed only to leave the summary as a commit comment.
-  issues: write
 
 concurrency:
   group: nightly
@@ -39,6 +37,18 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -c constraints.txt -e ".[all-providers]"
+
+      - name: check provider credential
+        # The default agent models use Anthropic; NVIDIA_API_KEY alone cannot run them.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::Live evaluation requires ANTHROPIC_API_KEY. Add it under Settings > Secrets and variables > Actions > New repository secret."
+            echo "### Live evaluation not configured" >> "$GITHUB_STEP_SUMMARY"
+            echo "Add the ANTHROPIC_API_KEY repository secret to run the default agent models." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: doctor
         # Runs first and exits non-zero on a missing grounding tool. A sweep on a box where
@@ -76,18 +86,20 @@ jobs:
           path: eval/results/
           retention-days: 30
 
-      - name: post the summary as a commit comment
+      - name: publish the run summary
         if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const dirs = fs.readdirSync('eval/results').filter(d => d !== 'baseline').sort();
-            if (dirs.length === 0) return;
-            const body = fs.readFileSync(`eval/results/${dirs[dirs.length - 1]}/summary.md`, 'utf8');
-            await github.rest.repos.createCommitComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              commit_sha: context.sha,
-              body,
-            });
+        # The run summary needs no repository write permission. Before a sweep starts,
+        # or if it fails before writing a summary, there may be nothing to publish.
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          summaries = sorted(
+              p for p in Path("eval/results").glob("*/summary.md")
+              if p.is_file() and p.parent.name != "baseline"
+          )
+          if summaries:
+              with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as out:
+                  out.write(summaries[-1].read_text(encoding="utf-8"))
+          PY

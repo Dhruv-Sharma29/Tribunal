@@ -63,6 +63,12 @@ see docs/13 § 58 for why, and do not "fix" it by following the default.
 
 ## 3. Sweep the dev split
 
+For the scheduled GitHub Actions run, add an `ANTHROPIC_API_KEY` repository secret under
+**Settings → Secrets and variables → Actions → New repository secret**. The workflow uses
+the default Anthropic agent models; exporting a key on your laptop does not configure
+GitHub's runner, and `NVIDIA_API_KEY` does not authenticate Anthropic models. Nightly checks
+this before starting a sweep and publishes results in the Actions run summary.
+
 ```bash
 tribunal eval --split dev --arms B0,B1,B2,B3 --config examples/nim.toml
 ```

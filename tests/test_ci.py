@@ -14,6 +14,9 @@ becomes advisory, a sweep with no timeout.
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -86,7 +89,7 @@ def test_every_workflow_declares_least_privilege():
 def test_the_pr_gate_runs_lint_tests_and_the_exit_code_contract():
     commands = " ".join(step.get("run", "") for step in steps(CI))
     assert "ruff check" in commands
-    assert "pytest -q" in commands
+    assert "python -m pytest -q" in commands
     assert "./scripts/check-exit-codes.sh" in commands
 
 
@@ -150,6 +153,61 @@ def test_the_nightly_checks_only_m4_for_regressions():
     can act on."""
     assert "check-regression.py" in text("nightly.yml")
     assert "M4" in text("nightly.yml")
+
+
+def test_the_nightly_rejects_a_missing_credential_before_the_sweep(tmp_path):
+    nightly_steps = steps(NIGHTLY)
+    guard = next(s for s in nightly_steps if s.get("name") == "check provider credential")
+    sweep = next(s for s in nightly_steps if s.get("name") == "sweep")
+    assert nightly_steps.index(guard) < nightly_steps.index(sweep)
+    summary = tmp_path / "step-summary.md"
+    result = subprocess.run(
+        ["bash", "-e", "-c", guard["run"]],
+        cwd=tmp_path,
+        env={**os.environ, "ANTHROPIC_API_KEY": "", "GITHUB_STEP_SUMMARY": str(summary)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "::error::" in result.stdout
+    assert "New repository secret" in result.stdout
+    assert "ANTHROPIC_API_KEY" in summary.read_text()
+    assert not (tmp_path / "eval" / "results").exists()
+
+
+@pytest.mark.parametrize("layout", ["absent", "baseline", "partial", "complete"])
+def test_the_nightly_publishes_only_a_completed_sweep_summary(tmp_path, layout):
+    """The always() step must also work after installation or the sweep fails."""
+    if layout != "absent":
+        baseline = tmp_path / "eval" / "results" / "baseline"
+        baseline.mkdir(parents=True)
+        (baseline / "summary.md").write_text("old baseline")
+    if layout in {"partial", "complete"}:
+        partial = tmp_path / "eval" / "results" / "20261003T000000Z"
+        partial.mkdir()
+    if layout == "complete":
+        for timestamp in ("20261001T000000Z", "20261002T000000Z"):
+            directory = tmp_path / "eval" / "results" / timestamp
+            directory.mkdir()
+            (directory / "summary.md").write_text(timestamp)
+    summary = tmp_path / "step-summary.md"
+    summary.write_text("existing diagnostics\n")
+    publish = next(s for s in steps(NIGHTLY) if s.get("name") == "publish the run summary")
+    # Run the embedded Python with the same interpreter as the tests.
+    script = publish["run"].split("\n", 1)[1].removesuffix("PY\n")
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, "GITHUB_STEP_SUMMARY": str(summary)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    expected = "existing diagnostics\n"
+    if layout == "complete":
+        expected += "20261002T000000Z"
+    assert summary.read_text() == expected
+    assert NIGHTLY["permissions"] == {"contents": "read"}
 
 
 def test_long_running_workflows_have_a_timeout():

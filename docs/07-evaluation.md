@@ -220,7 +220,7 @@ engineering judgement than the score does.
 Full sweeps are ~$25 and ~30 minutes ([10](10-cost-and-limits.md)) — do not run them per-commit.
 
 - **Per PR:** unit tests + `--smoke` (4 cases, cassette-replayed, zero API calls, < 60s).
-- **Nightly on `main`:** dev split, live, posts the summary as a commit comment; fails on
+- **Nightly on `main`:** dev split, live, publishes the summary in the Actions run; fails on
   regression beyond a threshold in M4.
 - **Per milestone, manual:** held-out sweep. Commit the results directory.
 
