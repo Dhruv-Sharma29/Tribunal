@@ -25,8 +25,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  configuration:
+    name: check nightly configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.provider.outputs.ready }}
+    steps:
+      - name: check provider credential
+        id: provider
+        # The default models use Anthropic. Check before installing dependencies.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          echo "### Live evaluation not configured" >> "$GITHUB_STEP_SUMMARY"
+          echo "No live evaluation ran. Add the ANTHROPIC_API_KEY repository secret under Settings > Secrets and variables > Actions > New repository secret to enable it." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            echo "::notice::Scheduled live evaluation skipped: ANTHROPIC_API_KEY is not configured."
+          else
+            echo "::error::Live evaluation requires ANTHROPIC_API_KEY. Add it under Settings > Secrets and variables > Actions > New repository secret."
+            exit 1
+          fi
+
   dev-split:
     name: dev split, live
+    needs: configuration
+    if: needs.configuration.outputs.ready == 'true'
     runs-on: ubuntu-latest
     # A sweep that hangs must not burn a six-hour runner.
     timeout-minutes: 45
@@ -37,18 +67,6 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -c constraints.txt -e ".[all-providers]"
-
-      - name: check provider credential
-        # The default agent models use Anthropic; NVIDIA_API_KEY alone cannot run them.
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::error::Live evaluation requires ANTHROPIC_API_KEY. Add it under Settings > Secrets and variables > Actions > New repository secret."
-            echo "### Live evaluation not configured" >> "$GITHUB_STEP_SUMMARY"
-            echo "Add the ANTHROPIC_API_KEY repository secret to run the default agent models." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
 
       - name: doctor
         # Runs first and exits non-zero on a missing grounding tool. A sweep on a box where

@@ -160,24 +160,56 @@ def test_the_nightly_checks_only_m4_for_regressions():
     assert "M4" in text("nightly.yml")
 
 
-def test_the_nightly_rejects_a_missing_credential_before_the_sweep(tmp_path):
+@pytest.mark.parametrize("event", ["schedule", "workflow_dispatch"])
+@pytest.mark.parametrize("credential", ["", "test-only-placeholder"])
+def test_the_nightly_checks_configuration_before_the_sweep(tmp_path, event, credential):
     nightly_steps = steps(NIGHTLY)
     guard = next(s for s in nightly_steps if s.get("name") == "check provider credential")
     sweep = next(s for s in nightly_steps if s.get("name") == "sweep")
     assert nightly_steps.index(guard) < nightly_steps.index(sweep)
     summary = tmp_path / "step-summary.md"
+    output = tmp_path / "step-output.txt"
     result = subprocess.run(
         ["bash", "-e", "-c", guard["run"]],
         cwd=tmp_path,
-        env={**os.environ, "ANTHROPIC_API_KEY": "", "GITHUB_STEP_SUMMARY": str(summary)},
+        env={
+            **os.environ,
+            "ANTHROPIC_API_KEY": credential,
+            "GITHUB_EVENT_NAME": event,
+            "GITHUB_STEP_SUMMARY": str(summary),
+            "GITHUB_OUTPUT": str(output),
+        },
         capture_output=True,
         text=True,
     )
-    assert result.returncode != 0
-    assert "::error::" in result.stdout
-    assert "New repository secret" in result.stdout
-    assert "ANTHROPIC_API_KEY" in summary.read_text()
+    if credential:
+        assert result.returncode == 0
+        assert output.read_text() == "ready=true\n"
+        assert not summary.exists()
+        assert credential not in result.stdout + result.stderr + output.read_text()
+    else:
+        assert output.read_text() == "ready=false\n"
+        assert "No live evaluation ran" in summary.read_text()
+        assert "ANTHROPIC_API_KEY" in summary.read_text()
+        assert "New repository secret" in summary.read_text()
+        if event == "schedule":
+            assert result.returncode == 0
+            assert "::notice::" in result.stdout
+            assert "::error::" not in result.stdout
+        else:
+            assert result.returncode != 0
+            assert "::error::" in result.stdout
     assert not (tmp_path / "eval" / "results").exists()
+
+
+def test_the_live_nightly_job_requires_a_configured_provider():
+    preflight = NIGHTLY["jobs"]["configuration"]
+    live = NIGHTLY["jobs"]["dev-split"]
+    assert live["needs"] == "configuration"
+    assert live["if"] == "needs.configuration.outputs.ready == 'true'"
+    assert preflight["outputs"]["ready"] == "${{ steps.provider.outputs.ready }}"
+    assert not any("uses" in step for step in preflight["steps"])
+    assert not any("pip install" in step.get("run", "") for step in preflight["steps"])
 
 
 @pytest.mark.parametrize("layout", ["absent", "baseline", "partial", "complete"])

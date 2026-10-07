@@ -223,7 +223,9 @@ Full sweeps are ~$25 and ~30 minutes ([10](10-cost-and-limits.md)) — do not ru
   committed agent recordings, with zero API calls. Full evaluation recordings are still
   pending; `eval --smoke` remains a strict replay command and fails on missing recordings.
 - **Nightly on `main`:** dev split, live, publishes the summary in the Actions run; fails on
-  regression beyond a threshold in M4.
+  regression beyond a threshold in M4. A configuration job checks for the provider secret
+  first: scheduled runs skip the live job with a setup notice when it is missing, while
+  manually requested live runs fail with setup instructions.
 - **Per milestone, manual:** held-out sweep. Commit the results directory.
 
 The API key lives in GitHub Actions secrets and is available only to the nightly workflow, never to

@@ -69,7 +69,9 @@ For the scheduled GitHub Actions run, add an `ANTHROPIC_API_KEY` repository secr
 **Settings → Secrets and variables → Actions → New repository secret**. The workflow uses
 the default Anthropic agent models; exporting a key on your laptop does not configure
 GitHub's runner, and `NVIDIA_API_KEY` does not authenticate Anthropic models. Nightly checks
-this before starting a sweep and publishes results in the Actions run summary.
+this before installing dependencies. Without the secret, scheduled runs publish a setup
+notice and skip the live job; a manual live run fails with the setup instructions. Once the
+secret is present, nightly runs the sweep and publishes results in the Actions run summary.
 
 ```bash
 tribunal eval --split dev --arms B0,B1,B2,B3 --config examples/nim.toml
