@@ -170,6 +170,35 @@ def test_identical_code_is_inconclusive_not_faster(exec_sandbox):
     assert not got.is_citable
 
 
+@pytest.mark.parametrize("after_ns", [500_000, 2_000_000])
+def test_identical_code_is_inconclusive_despite_timing_drift(monkeypatch, after_ns):
+    timings = iter([(1_000_000, 100), (after_ns, 100)])
+    calls = []
+
+    def time_once(self, source, benchmark, logical_name):
+        calls.append((source, benchmark, logical_name))
+        return next(timings)
+
+    monkeypatch.setattr(PerfTool, "time_once", time_once)
+    got = PerfTool(sandbox=Sandbox(SandboxConfig())).compare(FAST, FAST, BENCH, "accumulator.py")
+    assert calls == [(FAST, BENCH, "accumulator.py")] * 2
+    assert (got.before_ns, got.after_ns, got.repeats) == (1_000_000, after_ns, BENCH.repeats)
+    assert got.verdict == "inconclusive"
+    assert not got.is_citable
+
+
+@pytest.mark.parametrize(
+    "timings", [["benchmark failed"], [(1_000_000, 100), "benchmark failed"]]
+)
+def test_identical_code_preserves_measurement_errors(monkeypatch, timings):
+    results = iter(timings)
+    monkeypatch.setattr(PerfTool, "time_once", lambda *args: next(results))
+    got = PerfTool(sandbox=Sandbox(SandboxConfig())).compare(FAST, FAST, BENCH)
+    assert got.verdict == "unmeasurable"
+    assert "benchmark failed" in got.label
+    assert not got.is_citable
+
+
 def test_a_benchmark_that_cannot_run_is_unmeasurable(exec_sandbox):
     bogus = Benchmark(label="x", expression="nope(1)")
     got = PerfTool(sandbox=exec_sandbox).compare(SLOW, FAST, bogus)
@@ -200,8 +229,9 @@ def test_a_setup_name_must_be_an_identifier(exec_sandbox):
     assert PerfTool(sandbox=exec_sandbox).compare(SLOW, FAST, hostile).verdict == "unmeasurable"
 
 
-def test_benchmarks_are_unmeasurable_without_allow_exec():
-    got = PerfTool(sandbox=Sandbox(SandboxConfig())).compare(SLOW, FAST, BENCH)
+@pytest.mark.parametrize("original", [SLOW, FAST])
+def test_benchmarks_are_unmeasurable_without_allow_exec(original):
+    got = PerfTool(sandbox=Sandbox(SandboxConfig())).compare(original, FAST, BENCH)
     assert got.verdict == "unmeasurable"
     assert "--allow-exec" in got.label
 

@@ -188,7 +188,12 @@ class PerfTool:
         after = self.time_once(patched, benchmark, logical_name)
         if isinstance(after, str):
             return unmeasurable(benchmark.label, after)
-        return classify(benchmark, before, after)
+        measurement = classify(benchmark, before, after)
+        if original == patched:
+            # Separate runs can drift even with low within-run noise. Unchanged source
+            # cannot support a claim that the patch improved or regressed performance.
+            return measurement.model_copy(update={"verdict": "inconclusive"})
+        return measurement
 
 
 def classify(
