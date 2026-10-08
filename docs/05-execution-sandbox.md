@@ -192,3 +192,7 @@ Write exactly this, and nothing stronger:
 > capabilities and CPU/memory/PID limits. With `--sandbox=subprocess` the same resource limits and a
 > scrubbed environment apply, **but network access is not blocked** — use Docker if the input is
 > untrusted. Static grounding (`bandit`, `ruff`, `radon`) never executes the target.
+
+## Supported execution platform
+
+Layer 2 (`--sandbox=subprocess --allow-exec`) requires Linux, including in CI. macOS rejects the address-space limit used here, and Windows does not provide this POSIX execution boundary. Run the Linux container or use Docker mode with a running Docker engine on macOS. Static grounding and execution-disabled review do not require the subprocess sandbox. Sandbox resource-limit tests must run on Linux; a macOS failure is not a reason to remove these limits.

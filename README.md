@@ -369,6 +369,8 @@ neither image has anything credential-shaped in its layer history.
 
 ## Executing model-written code
 
+**Platform requirement:** the subprocess execution sandbox requires Linux. Its address-space and process resource limits are not portable to macOS/Windows. Static grounding and execution-disabled review can run on macOS; use the documented Linux container or Docker sandbox for execution there. Run resource-limit and subprocess integration tests on Linux. Do not disable resource limits to make those tests pass on another OS.
+
 Code the tribunal writes is executed only with `--allow-exec`. With `--sandbox=docker` (recommended)
 execution happens in a network-less, read-only container as an unprivileged user with dropped
 capabilities and CPU/memory/PID limits. With `--sandbox=subprocess` the same resource limits and
